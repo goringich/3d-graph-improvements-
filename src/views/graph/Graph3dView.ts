@@ -1,13 +1,14 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, ViewStateResult, WorkspaceLeaf } from "obsidian";
 import Node from "../../graph/Node";
 import { ForceGraph } from "./ForceGraph";
 import { GraphSettingsView } from "../settings/GraphSettingsView";
 import Graph3dPlugin from "src/main";
+import { GRAPH_3D_VIEW_TYPE } from "src/main";
 
 export class Graph3dView extends ItemView {
 	private forceGraph: ForceGraph;
 	private graphShown = false;
-	private readonly isLocalGraph: boolean;
+	private isLocalGraph: boolean;
 	private readonly plugin: Graph3dPlugin;
 
 	constructor(
@@ -28,7 +29,11 @@ export class Graph3dView extends ItemView {
 
 	async onOpen() {
 		await super.onOpen();
-		this.showGraph();
+		if (this.plugin.isGraphCacheReady()) {
+			this.showGraph();
+		} else {
+			this.plugin.queueGraphView(this);
+		}
 	}
 
 	showGraph() {
@@ -58,7 +63,21 @@ export class Graph3dView extends ItemView {
 	}
 
 	getViewType(): string {
-		return "3d_graph_view";
+		return GRAPH_3D_VIEW_TYPE;
+	}
+
+	async setState(
+		state: { isLocalGraph?: boolean },
+		result: ViewStateResult
+	) {
+		this.isLocalGraph = Boolean(state?.isLocalGraph);
+		await super.setState(state, result);
+	}
+
+	getState() {
+		return {
+			isLocalGraph: this.isLocalGraph,
+		};
 	}
 
 	onResize() {

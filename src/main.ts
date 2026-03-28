@@ -8,6 +8,8 @@ import EventBus from "./util/EventBus";
 import { ResolvedLinkCache } from "./graph/Link";
 import shallowCompare from "./util/ShallowCompare";
 
+export const GRAPH_3D_VIEW_TYPE = "3d_graph_view";
+
 export default class Graph3dPlugin extends Plugin {
 	_resolvedCache: ResolvedLinkCache;
 
@@ -27,6 +29,10 @@ export default class Graph3dPlugin extends Plugin {
 
 	async onload() {
 		await this.init();
+		this.registerView(
+			GRAPH_3D_VIEW_TYPE,
+			(leaf) => new Graph3dView(this, leaf)
+		);
 		this.addRibbonIcon("glasses", "3D Graph", this.openGlobalGraph);
 		this.addCommand({
 			id: "open-3d-graph-global",
@@ -110,6 +116,16 @@ export default class Graph3dPlugin extends Plugin {
 		this.queuedGraphs = [];
 	}
 
+	public queueGraphView(view: Graph3dView) {
+		if (!this.queuedGraphs.includes(view)) {
+			this.queuedGraphs.push(view);
+		}
+	}
+
+	public isGraphCacheReady() {
+		return this.cacheIsReady.value;
+	}
+
 	private onGraphCacheReady = () => {
 		console.log("Graph cache is ready");
 		this.cacheIsReady.value = true;
@@ -167,15 +183,16 @@ export default class Graph3dPlugin extends Plugin {
 	};
 
 	// Open a global or local graph
-	private openGraph = (isLocalGraph: boolean) => {
+	private openGraph = async (isLocalGraph: boolean) => {
 		const leaf = this.app.workspace.getLeaf(isLocalGraph ? "split" : false);
-		const graphView = new Graph3dView(this, leaf, isLocalGraph);
-		leaf.open(graphView);
-		if (this.cacheIsReady.value) {
-			graphView.showGraph();
-		} else {
-			this.queuedGraphs.push(graphView);
-		}
+		await leaf.setViewState({
+			type: GRAPH_3D_VIEW_TYPE,
+			active: true,
+			state: {
+				isLocalGraph,
+			},
+		});
+		this.app.workspace.revealLeaf(leaf);
 	};
 
 	private async loadSettings(): Promise<GraphSettings> {
@@ -194,6 +211,7 @@ export default class Graph3dPlugin extends Plugin {
 
 	onunload() {
 		super.onunload();
+		this.app.workspace.detachLeavesOfType(GRAPH_3D_VIEW_TYPE);
 		this.callbackUnregisterHandles.forEach((handle) => handle());
 		EventBus.off("do-reset-settings", this.onDoResetSettings);
 	}
