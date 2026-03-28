@@ -1,22 +1,14 @@
-import { ItemView, ViewStateResult, WorkspaceLeaf } from "obsidian";
+import { ItemView, WorkspaceLeaf } from "obsidian";
 import Node from "../../graph/Node";
 import { ForceGraph } from "./ForceGraph";
 import { GraphSettingsView } from "../settings/GraphSettingsView";
 import Graph3dPlugin from "src/main";
 import { GRAPH_3D_VIEW_TYPE } from "src/main";
-import {
-	restoreIsLocalGraph,
-	serializeGraphViewState,
-	shouldQueueGraphRender,
-	shouldShowGraph,
-} from "./graphViewState";
 
 export class Graph3dView extends ItemView {
 	private forceGraph: ForceGraph;
-	private graphShown = false;
-	private isLocalGraph: boolean;
+	private readonly isLocalGraph: boolean;
 	private readonly plugin: Graph3dPlugin;
-	private statusEl: HTMLDivElement | null = null;
 
 	constructor(
 		plugin: Graph3dPlugin,
@@ -31,43 +23,22 @@ export class Graph3dView extends ItemView {
 	onunload() {
 		super.onunload();
 		this.forceGraph?.getInstance()._destructor();
-		this.graphShown = false;
-	}
-
-	async onOpen() {
-		await super.onOpen();
-		if (shouldQueueGraphRender(this.plugin.isGraphCacheReady())) {
-			this.plugin.queueGraphView(this);
-		} else {
-			this.showGraph();
-		}
 	}
 
 	showGraph() {
-		if (!shouldShowGraph(this.graphShown)) return;
-
-		const viewContent = this.contentEl;
+		const viewContent = this.containerEl.querySelector(
+			".view-content"
+		) as HTMLElement;
 
 		if (viewContent) {
 			viewContent.empty();
 			viewContent.classList.add("graph-3d-view");
-			this.renderStatus(viewContent, "Preparing 3D graph...");
-			try {
-				this.appendGraph(viewContent);
-				const settings = new GraphSettingsView(
-					this.plugin.settingsState,
-					this.plugin.theme
-				);
-				viewContent.appendChild(settings);
-				this.graphShown = true;
-				this.updateStatus();
-			} catch (error) {
-				console.error("3D Graph view failed to render", error);
-				this.renderStatus(
-					viewContent,
-					`Render failed: ${error instanceof Error ? error.message : String(error)}`
-				);
-			}
+			this.appendGraph(viewContent);
+			const settings = new GraphSettingsView(
+				this.plugin.settingsState,
+				this.plugin.theme
+			);
+			viewContent.appendChild(settings);
 		} else {
 			console.error("Could not find view content");
 		}
@@ -81,31 +52,17 @@ export class Graph3dView extends ItemView {
 		return GRAPH_3D_VIEW_TYPE;
 	}
 
-	async setState(
-		state: { isLocalGraph?: boolean },
-		result: ViewStateResult
-	) {
-		this.isLocalGraph = restoreIsLocalGraph(state);
-		await super.setState(state, result);
-	}
-
-	getState() {
-		return serializeGraphViewState(this.isLocalGraph);
-	}
-
 	onResize() {
 		super.onResize();
 		this.forceGraph?.updateDimensions();
 	}
 
 	private appendGraph(viewContent: HTMLElement) {
-		this.updateStatus("Creating ForceGraph instance...");
 		this.forceGraph = new ForceGraph(
 			this.plugin,
 			viewContent,
 			this.isLocalGraph
 		);
-		this.updateStatus();
 
 		this.forceGraph
 			.getInstance()
@@ -124,31 +81,5 @@ export class Graph3dView extends ItemView {
 					}
 				}
 			});
-	}
-
-	private renderStatus(containerEl: HTMLElement, text: string) {
-		const existing = containerEl.querySelector(".graph-3d-status");
-		if (existing instanceof HTMLDivElement) {
-			this.statusEl = existing;
-		} else {
-			this.statusEl = document.createElement("div");
-			this.statusEl.className = "graph-3d-status";
-			containerEl.appendChild(this.statusEl);
-		}
-		this.statusEl.textContent = text;
-	}
-
-	private updateStatus(message?: string) {
-		if (!this.statusEl) return;
-		if (message) {
-			this.statusEl.textContent = message;
-			return;
-		}
-
-		const graph = this.plugin.globalGraph;
-		const nodeCount = graph?.nodes?.length ?? 0;
-		const linkCount = graph?.links?.length ?? 0;
-		const scope = this.isLocalGraph ? "Local" : "Global";
-		this.statusEl.textContent = `${scope} graph ready. Nodes: ${nodeCount}. Links: ${linkCount}.`;
 	}
 }

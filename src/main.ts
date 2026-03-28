@@ -16,9 +16,7 @@ export default class Graph3dPlugin extends Plugin {
 	// States
 	public settingsState: State<GraphSettings>;
 	public openFileState: State<string | undefined> = new State(undefined);
-	private cacheIsReady: State<boolean> = new State(
-		this.app.metadataCache.resolvedLinks !== undefined
-	);
+	private cacheIsReady: State<boolean> = new State(false);
 
 	// Other properties
 	public globalGraph: Graph;
@@ -29,10 +27,6 @@ export default class Graph3dPlugin extends Plugin {
 
 	async onload() {
 		await this.init();
-		this.registerView(
-			GRAPH_3D_VIEW_TYPE,
-			(leaf) => new Graph3dView(this, leaf)
-		);
 		this.addRibbonIcon("glasses", "3D Graph", this.openGlobalGraph);
 		this.addCommand({
 			id: "open-3d-graph-global",
@@ -116,18 +110,7 @@ export default class Graph3dPlugin extends Plugin {
 		this.queuedGraphs = [];
 	}
 
-	public queueGraphView(view: Graph3dView) {
-		if (!this.queuedGraphs.includes(view)) {
-			this.queuedGraphs.push(view);
-		}
-	}
-
-	public isGraphCacheReady() {
-		return this.cacheIsReady.value;
-	}
-
 	private onGraphCacheReady = () => {
-		console.log("Graph cache is ready");
 		this.cacheIsReady.value = true;
 		this.onGraphCacheChanged();
 	};
@@ -147,16 +130,6 @@ export default class Graph3dPlugin extends Plugin {
 				this.app.metadataCache.resolvedLinks
 			);
 			this.globalGraph = Graph.createFromApp(this.app);
-		} else {
-			console.log(
-				"changed but ",
-				this.cacheIsReady.value,
-				" and ",
-				shallowCompare(
-					this._resolvedCache,
-					this.app.metadataCache.resolvedLinks
-				)
-			);
 		}
 	};
 
@@ -185,14 +158,14 @@ export default class Graph3dPlugin extends Plugin {
 	// Open a global or local graph
 	private openGraph = async (isLocalGraph: boolean) => {
 		const leaf = this.app.workspace.getLeaf(isLocalGraph ? "split" : false);
-		await leaf.setViewState({
-			type: GRAPH_3D_VIEW_TYPE,
-			active: true,
-			state: {
-				isLocalGraph,
-			},
-		});
+		const graphView = new Graph3dView(this, leaf, isLocalGraph);
+		await leaf.open(graphView);
 		this.app.workspace.revealLeaf(leaf);
+		if (this.cacheIsReady.value) {
+			graphView.showGraph();
+		} else {
+			this.queuedGraphs.push(graphView);
+		}
 	};
 
 	private async loadSettings(): Promise<GraphSettings> {
@@ -202,16 +175,11 @@ export default class Graph3dPlugin extends Plugin {
 	}
 
 	async saveSettings() {
-		console.log(
-			"saveSettings:",
-			this.settingsState.getRawValue().toObject()
-		);
 		await this.saveData(this.settingsState.getRawValue().toObject());
 	}
 
 	onunload() {
 		super.onunload();
-		this.app.workspace.detachLeavesOfType(GRAPH_3D_VIEW_TYPE);
 		this.callbackUnregisterHandles.forEach((handle) => handle());
 		EventBus.off("do-reset-settings", this.onDoResetSettings);
 	}

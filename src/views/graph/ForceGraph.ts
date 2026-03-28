@@ -33,8 +33,6 @@ export class ForceGraph {
 		this.isLocalGraph = isLocalGraph;
 		this.plugin = plugin;
 
-		console.log("ForceGraph constructor", rootHtmlElement);
-
 		this.createGraph();
 		this.initListeners();
 	}
@@ -74,7 +72,6 @@ export class ForceGraph {
 			this.graph = this.plugin.globalGraph
 				.clone()
 				.getLocalGraph(this.plugin.openFileState.value);
-			console.log(this.graph);
 		} else {
 			this.graph = this.plugin.globalGraph.clone();
 		}
