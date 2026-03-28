@@ -65,6 +65,7 @@ export class ForceGraph {
 			.backgroundColor(rgba(0, 0, 0, 0.0))
 			.width(width)
 			.height(height);
+		this.applyDisplayForces();
 	}
 
 	private getGraphData = (): Graph => {
@@ -82,11 +83,17 @@ export class ForceGraph {
 
 	private refreshGraphData = () => {
 		this.instance.graphData(this.getGraphData());
+		this.applyDisplayForces();
 	};
 
 	private onSettingsStateChanged = (data: StateChange) => {
 		if (data.currentPath === "display.nodeSize") {
 			this.instance.nodeRelSize(data.newValue);
+		} else if (
+			data.currentPath === "display.nodeSpacing" ||
+			data.currentPath === "display.nodeRepulsion"
+		) {
+			this.applyDisplayForces();
 		} else if (data.currentPath === "display.linkWidth") {
 			this.instance.linkWidth(data.newValue);
 		} else if (data.currentPath === "display.particleSize") {
@@ -97,6 +104,30 @@ export class ForceGraph {
 
 		this.instance.refresh(); // other settings only need a refresh
 	};
+
+	private applyDisplayForces() {
+		const graphInstance = this.instance as ForceGraph3DInstance & {
+			d3Force?: (forceName: string) => unknown;
+			d3ReheatSimulation?: () => void;
+		};
+		if (!graphInstance?.d3Force) return;
+
+		try {
+			const { nodeSpacing, nodeRepulsion } = this.plugin.getSettings().display;
+			const chargeForce = graphInstance.d3Force("charge") as
+				| { strength?: (value: number) => void }
+				| undefined;
+			const linkForce = graphInstance.d3Force("link") as
+				| { distance?: (value: number) => void }
+				| undefined;
+
+			chargeForce?.strength?.(nodeRepulsion);
+			linkForce?.distance?.(nodeSpacing);
+			graphInstance.d3ReheatSimulation?.();
+		} catch (error) {
+			console.error("Could not apply display force settings", error);
+		}
+	}
 
 	public updateDimensions() {
 		const [width, height] = [

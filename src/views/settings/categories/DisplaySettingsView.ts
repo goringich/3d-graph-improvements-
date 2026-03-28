@@ -10,6 +10,8 @@ const DisplaySettingsView = (
 	containerEl: HTMLElement
 ) => {
 	NodeSizeSetting(displaySettings, containerEl);
+	NodeSpacingSetting(displaySettings, containerEl);
+	NodeRepulsionSetting(displaySettings, containerEl);
 	LinkThicknessSetting(displaySettings, containerEl);
 	ParticleSizeSetting(displaySettings, containerEl);
 	ParticleCountSetting(displaySettings, containerEl);
@@ -40,6 +42,42 @@ const LinkThicknessSetting = (
 	};
 	return SimpleSliderSetting(containerEl, options, (value) => {
 		displaySettings.value.linkThickness = value;
+	});
+};
+
+const NodeSpacingSetting = (
+	displaySettings: State<DisplaySettings>,
+	containerEl: HTMLElement
+) => {
+	const options: SliderOptions = {
+		name: "Node Spacing",
+		value: displaySettings.value.nodeSpacing,
+		stepOptions: {
+			min: 10,
+			max: 100,
+			step: 5,
+		},
+	};
+	return SimpleSliderSetting(containerEl, options, (value) => {
+		displaySettings.value.nodeSpacing = value;
+	});
+};
+
+const NodeRepulsionSetting = (
+	displaySettings: State<DisplaySettings>,
+	containerEl: HTMLElement
+) => {
+	const options: SliderOptions = {
+		name: "Node Repulsion",
+		value: displaySettings.value.nodeRepulsion,
+		stepOptions: {
+			min: -150,
+			max: -20,
+			step: 5,
+		},
+	};
+	return SimpleSliderSetting(containerEl, options, (value) => {
+		displaySettings.value.nodeRepulsion = value;
 	});
 };
 
