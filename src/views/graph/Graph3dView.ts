@@ -127,14 +127,21 @@ export class Graph3dView extends ItemView {
 	}
 
 	private renderStatus(containerEl: HTMLElement, text: string) {
-		this.statusEl = containerEl.createDiv({ cls: "graph-3d-status" });
-		this.statusEl.setText(text);
+		const existing = containerEl.querySelector(".graph-3d-status");
+		if (existing instanceof HTMLDivElement) {
+			this.statusEl = existing;
+		} else {
+			this.statusEl = document.createElement("div");
+			this.statusEl.className = "graph-3d-status";
+			containerEl.appendChild(this.statusEl);
+		}
+		this.statusEl.textContent = text;
 	}
 
 	private updateStatus(message?: string) {
 		if (!this.statusEl) return;
 		if (message) {
-			this.statusEl.setText(message);
+			this.statusEl.textContent = message;
 			return;
 		}
 
@@ -142,8 +149,6 @@ export class Graph3dView extends ItemView {
 		const nodeCount = graph?.nodes?.length ?? 0;
 		const linkCount = graph?.links?.length ?? 0;
 		const scope = this.isLocalGraph ? "Local" : "Global";
-		this.statusEl.setText(
-			`${scope} graph ready. Nodes: ${nodeCount}. Links: ${linkCount}.`
-		);
+		this.statusEl.textContent = `${scope} graph ready. Nodes: ${nodeCount}. Links: ${linkCount}.`;
 	}
 }
