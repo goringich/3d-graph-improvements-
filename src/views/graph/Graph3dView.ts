@@ -39,9 +39,7 @@ export class Graph3dView extends ItemView {
 	showGraph() {
 		if (this.graphShown) return;
 
-		const viewContent = this.containerEl.querySelector(
-			".view-content"
-		) as HTMLElement;
+		const viewContent = this.contentEl;
 
 		if (viewContent) {
 			viewContent.empty();
@@ -82,7 +80,7 @@ export class Graph3dView extends ItemView {
 
 	onResize() {
 		super.onResize();
-		this.forceGraph.updateDimensions();
+		this.forceGraph?.updateDimensions();
 	}
 
 	private appendGraph(viewContent: HTMLElement) {
