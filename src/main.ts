@@ -1,99 +1,190 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import { Notice, Plugin } from "obsidian";
+import { Graph3dView } from "./views/graph/Graph3dView";
+import GraphSettings from "./settings/GraphSettings";
+import State from "./util/State";
+import Graph from "./graph/Graph";
+import ObsidianTheme from "./util/ObsidianTheme";
+import EventBus from "./util/EventBus";
+import { ResolvedLinkCache } from "./graph/Link";
+import shallowCompare from "./util/ShallowCompare";
 
-// Remember to rename these classes and interfaces!
+export const GRAPH_3D_VIEW_TYPE = "3d_graph_view";
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class Graph3dPlugin extends Plugin {
+	_resolvedCache: ResolvedLinkCache;
+
+	// States
+	public settingsState: State<GraphSettings>;
+	public openFileState: State<string | undefined> = new State(undefined);
+	private cacheIsReady: State<boolean> = new State(false);
+
+	// Other properties
+	public globalGraph: Graph;
+	public theme: ObsidianTheme;
+	// Graphs that are waiting for cache to be ready
+	private queuedGraphs: Graph3dView[] = [];
+	private callbackUnregisterHandles: (() => void)[] = [];
 
 	async onload() {
-		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+		await this.init();
+		this.addRibbonIcon("glasses", "3D Graph", this.openGlobalGraph);
+		this.addCommand({
+			id: "open-3d-graph-global",
+			name: "Open Global 3D Graph",
+			callback: this.openGlobalGraph,
 		});
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
+			id: "open-3d-graph-local",
+			name: "Open Local 3D Graph",
+			callback: this.openLocalGraph,
 		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+	}
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+	private async init() {
+		await this.initStates();
+		this.initListeners();
+	}
+
+	private async initStates() {
+		const settings = await this.loadSettings();
+		this.settingsState = new State<GraphSettings>(settings);
+		this.theme = new ObsidianTheme(this.app.workspace.containerEl);
+		this.cacheIsReady.value =
+			this.app.metadataCache.resolvedLinks !== undefined;
+		this.onGraphCacheChanged();
+	}
+
+	private initListeners() {
+		this.callbackUnregisterHandles.push(
+			// save settings on change
+			this.settingsState.onChange(() => this.saveSettings())
+		);
+
+		// internal event to reset settings to default
+		EventBus.on("do-reset-settings", this.onDoResetSettings);
+
+		// show open local graph button in file menu
+		this.registerEvent(
+			this.app.workspace.on("file-menu", (menu, file) => {
+				if (!file) return;
+				menu.addItem((item) => {
+					item.setTitle("Open in local 3D Graph")
+						.setIcon("glasses")
+						.onClick(() => this.openLocalGraph());
+				});
+			})
+		);
+
+		// when a file gets opened, update the open file state
+		this.registerEvent(
+			this.app.workspace.on("file-open", (file) => {
+				if (file) this.openFileState.value = file.path;
+			})
+		);
+
+		this.callbackUnregisterHandles.push(
+			// when the cache is ready, open the queued graphs
+			this.cacheIsReady.onChange((isReady) => {
+				if (isReady) {
+					this.openQueuedGraphs();
 				}
-				return false;
-			}
-		});
+			})
+		);
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
+		// all files are resolved, so the cache is ready:
+		this.app.metadataCache.on(
+			"resolved",
+			this.onGraphCacheReady.bind(this)
+		);
+		// the cache changed:
+		this.app.metadataCache.on(
+			"resolve",
+			this.onGraphCacheChanged.bind(this)
+		);
 	}
 
-	onunload() {
+	// opens all queued graphs (graphs get queued if cache isnt ready yet)
+	private openQueuedGraphs() {
+		this.queuedGraphs.forEach((view) => view.showGraph());
+		this.queuedGraphs = [];
 	}
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+	private onGraphCacheReady = () => {
+		this.cacheIsReady.value = true;
+		this.onGraphCacheChanged();
+	};
+
+	private onGraphCacheChanged = () => {
+		// check if the cache actually updated
+		// Obsidian API sends a lot of (for this plugin) unnecessary stuff
+		// with the resolve event
+		if (
+			this.cacheIsReady.value &&
+			!shallowCompare(
+				this._resolvedCache,
+				this.app.metadataCache.resolvedLinks
+			)
+		) {
+			this._resolvedCache = structuredClone(
+				this.app.metadataCache.resolvedLinks
+			);
+			this.globalGraph = Graph.createFromApp(this.app);
+		}
+	};
+
+	private onDoResetSettings = () => {
+		this.settingsState.value.reset();
+		EventBus.trigger("did-reset-settings");
+	};
+
+	// Opens a local graph view in a new leaf
+	private openLocalGraph = () => {
+		const newFilePath = this.app.workspace.getActiveFile()?.path;
+
+		if (newFilePath) {
+			this.openFileState.value = newFilePath;
+			this.openGraph(true);
+		} else {
+			new Notice("No file is currently open");
+		}
+	};
+
+	// Opens a global graph view in the current leaf
+	private openGlobalGraph = () => {
+		this.openGraph(false);
+	};
+
+	// Open a global or local graph
+	private openGraph = async (isLocalGraph: boolean) => {
+		const leaf = this.app.workspace.getLeaf(isLocalGraph ? "split" : false);
+		const graphView = new Graph3dView(this, leaf, isLocalGraph);
+		await leaf.open(graphView);
+		this.app.workspace.revealLeaf(leaf);
+		if (this.cacheIsReady.value) {
+			graphView.showGraph();
+		} else {
+			this.queuedGraphs.push(graphView);
+		}
+	};
+
+	private async loadSettings(): Promise<GraphSettings> {
+		const loadedData = await this.loadData(),
+			settings = GraphSettings.fromStore(loadedData);
+		return settings;
 	}
 
 	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
+		await this.saveData(this.settingsState.getRawValue().toObject());
 	}
 
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
+	onunload() {
+		super.onunload();
+		this.callbackUnregisterHandles.forEach((handle) => handle());
+		EventBus.off("do-reset-settings", this.onDoResetSettings);
 	}
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+	public getSettings(): GraphSettings {
+		return this.settingsState.value;
 	}
 }
