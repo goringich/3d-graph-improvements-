@@ -10,8 +10,9 @@ const DisplaySettingsView = (
 	containerEl: HTMLElement
 ) => {
 	NodeSizeSetting(displaySettings, containerEl);
-	NodeSpacingSetting(displaySettings, containerEl);
+	GraphDiameterSetting(displaySettings, containerEl);
 	NodeRepulsionSetting(displaySettings, containerEl);
+	LayoutDampingSetting(displaySettings, containerEl);
 	LinkThicknessSetting(displaySettings, containerEl);
 	ParticleSizeSetting(displaySettings, containerEl);
 	ParticleCountSetting(displaySettings, containerEl);
@@ -45,16 +46,16 @@ const LinkThicknessSetting = (
 	});
 };
 
-const NodeSpacingSetting = (
+const GraphDiameterSetting = (
 	displaySettings: State<DisplaySettings>,
 	containerEl: HTMLElement
 ) => {
 	const options: SliderOptions = {
-		name: "Node Spacing",
+		name: "Graph Diameter",
 		value: displaySettings.value.nodeSpacing,
 		stepOptions: {
 			min: 10,
-			max: 100,
+			max: 120,
 			step: 5,
 		},
 	};
@@ -78,6 +79,24 @@ const NodeRepulsionSetting = (
 	};
 	return SimpleSliderSetting(containerEl, options, (value) => {
 		displaySettings.value.nodeRepulsion = value;
+	});
+};
+
+const LayoutDampingSetting = (
+	displaySettings: State<DisplaySettings>,
+	containerEl: HTMLElement
+) => {
+	const options: SliderOptions = {
+		name: "Layout Damping",
+		value: displaySettings.value.layoutDamping,
+		stepOptions: {
+			min: 0.1,
+			max: 0.95,
+			step: 0.05,
+		},
+	};
+	return SimpleSliderSetting(containerEl, options, (value) => {
+		displaySettings.value.layoutDamping = Number(value.toFixed(2));
 	});
 };
 

@@ -4,10 +4,11 @@ import assert from "node:assert/strict";
 import { DisplaySettings } from "../src/settings/categories/DisplaySettings.ts";
 import { applyDisplayForces } from "../src/views/graph/applyDisplayForces.ts";
 
-test("applyDisplayForces applies spacing and repulsion and reheats the graph", () => {
-	const displaySettings = new DisplaySettings(4, 5, 6, 4, 45, -90);
+test("applyDisplayForces applies spacing, repulsion, damping and reheats the graph", () => {
+	const displaySettings = new DisplaySettings(4, 5, 6, 4, 45, -90, 0.75);
 	let receivedRepulsion: number | undefined;
 	let receivedSpacing: number | undefined;
+	let receivedDamping: number | undefined;
 	let reheated = false;
 
 	const graphInstance = {
@@ -28,6 +29,9 @@ test("applyDisplayForces applies spacing and repulsion and reheats the graph", (
 			}
 			return undefined;
 		},
+		d3VelocityDecay(value: number) {
+			receivedDamping = value;
+		},
 		d3ReheatSimulation() {
 			reheated = true;
 		},
@@ -38,6 +42,7 @@ test("applyDisplayForces applies spacing and repulsion and reheats the graph", (
 	assert.equal(applied, true);
 	assert.equal(receivedRepulsion, -90);
 	assert.equal(receivedSpacing, 45);
+	assert.equal(receivedDamping, 0.75);
 	assert.equal(reheated, true);
 });
 

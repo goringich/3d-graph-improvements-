@@ -89,7 +89,8 @@ export class ForceGraph {
 			this.instance.nodeRelSize(data.newValue);
 		} else if (
 			data.currentPath === "display.nodeSpacing" ||
-			data.currentPath === "display.nodeRepulsion"
+			data.currentPath === "display.nodeRepulsion" ||
+			data.currentPath === "display.layoutDamping"
 		) {
 			this.applyDisplayForces();
 		} else if (data.currentPath === "display.linkWidth") {

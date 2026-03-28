@@ -31,6 +31,7 @@ test("DisplaySettings keeps safe defaults and round-trips new force controls", (
 	const defaults = new DisplaySettings();
 	assert.equal(defaults.nodeSpacing, 30);
 	assert.equal(defaults.nodeRepulsion, -60);
+	assert.equal(defaults.layoutDamping, 0.6);
 
 	const restored = DisplaySettings.fromStore({
 		nodeSize: 3,
@@ -39,10 +40,12 @@ test("DisplaySettings keeps safe defaults and round-trips new force controls", (
 		particleCount: 20,
 		nodeSpacing: 55,
 		nodeRepulsion: -80,
+		layoutDamping: 0.75,
 	});
 
 	assert.equal(restored.nodeSpacing, 55);
 	assert.equal(restored.nodeRepulsion, -80);
+	assert.equal(restored.layoutDamping, 0.75);
 	assert.deepEqual(restored.toObject(), {
 		nodeSize: 3,
 		linkThickness: 5,
@@ -50,5 +53,6 @@ test("DisplaySettings keeps safe defaults and round-trips new force controls", (
 		particleCount: 20,
 		nodeSpacing: 55,
 		nodeRepulsion: -80,
+		layoutDamping: 0.75,
 	});
 });

@@ -5,6 +5,7 @@ export class DisplaySettings {
 	particleCount = 4;
 	nodeSpacing = 30;
 	nodeRepulsion = -60;
+	layoutDamping = 0.6;
 
 	constructor(
 		nodeSize?: number,
@@ -12,7 +13,8 @@ export class DisplaySettings {
 		particleSize?: number,
 		particleCount?: number,
 		nodeSpacing?: number,
-		nodeRepulsion?: number
+		nodeRepulsion?: number,
+		layoutDamping?: number
 	) {
 		this.nodeSize = nodeSize ?? this.nodeSize;
 		this.linkThickness = linkThickness ?? this.linkThickness;
@@ -20,6 +22,7 @@ export class DisplaySettings {
 		this.particleCount = particleCount ?? this.particleCount;
 		this.nodeSpacing = nodeSpacing ?? this.nodeSpacing;
 		this.nodeRepulsion = nodeRepulsion ?? this.nodeRepulsion;
+		this.layoutDamping = layoutDamping ?? this.layoutDamping;
 	}
 
 	public static fromStore(store: any) {
@@ -29,7 +32,8 @@ export class DisplaySettings {
 			store?.particleSize,
 			store?.particleCount,
 			store?.nodeSpacing,
-			store?.nodeRepulsion
+			store?.nodeRepulsion,
+			store?.layoutDamping
 		);
 	}
 
@@ -41,6 +45,7 @@ export class DisplaySettings {
 			particleCount: this.particleCount,
 			nodeSpacing: this.nodeSpacing,
 			nodeRepulsion: this.nodeRepulsion,
+			layoutDamping: this.layoutDamping,
 		};
 	}
 }
