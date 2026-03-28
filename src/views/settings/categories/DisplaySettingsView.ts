@@ -24,6 +24,7 @@ const NodeSizeSetting = (
 ) => {
 	const options: SliderOptions = {
 		name: "Node Size",
+		desc: "Visual size of each node.",
 		value: displaySettings.value.nodeSize,
 		stepOptions: DEFAULT_SLIDER_STEP_OPTIONS,
 	};
@@ -38,6 +39,7 @@ const LinkThicknessSetting = (
 ) => {
 	const options: SliderOptions = {
 		name: "Link Thickness",
+		desc: "Visual thickness of connections between notes.",
 		value: displaySettings.value.linkThickness,
 		stepOptions: DEFAULT_SLIDER_STEP_OPTIONS,
 	};
@@ -52,6 +54,7 @@ const GraphDiameterSetting = (
 ) => {
 	const options: SliderOptions = {
 		name: "Graph Diameter",
+		desc: "Overall spread of the graph: higher values push linked nodes farther apart.",
 		value: displaySettings.value.nodeSpacing,
 		stepOptions: {
 			min: 10,
@@ -70,6 +73,7 @@ const NodeRepulsionSetting = (
 ) => {
 	const options: SliderOptions = {
 		name: "Node Repulsion",
+		desc: "How strongly nodes push each other away. More negative means stronger separation.",
 		value: displaySettings.value.nodeRepulsion,
 		stepOptions: {
 			min: -150,
@@ -88,6 +92,7 @@ const LayoutDampingSetting = (
 ) => {
 	const options: SliderOptions = {
 		name: "Layout Damping",
+		desc: "How quickly the graph settles after movement. Higher values calm motion faster.",
 		value: displaySettings.value.layoutDamping,
 		stepOptions: {
 			min: 0.1,
@@ -106,6 +111,7 @@ const ParticleSizeSetting = (
 ) => {
 	const options: SliderOptions = {
 		name: "Particle Size",
+		desc: "Size of animated particles on highlighted links.",
 		value: displaySettings.value.particleSize,
 		stepOptions: DEFAULT_SLIDER_STEP_OPTIONS,
 	};
@@ -120,6 +126,7 @@ const ParticleCountSetting = (
 ) => {
 	const options: SliderOptions = {
 		name: "Particle Count",
+		desc: "Number of animated particles shown on highlighted links.",
 		value: displaySettings.value.particleCount,
 		stepOptions: DEFAULT_SLIDER_STEP_OPTIONS,
 	};

@@ -3,6 +3,7 @@ import {Setting} from "obsidian";
 const SimpleSliderSetting = (containerEl: HTMLElement, options: SliderOptions, onChange: (newValue: number) => void) => {
 	const slider = new Setting(containerEl)
 		.setName(options.name)
+		.setDesc(options.desc ?? "")
 		.setClass("mod-slider")
 		.addSlider(
 			(slider) => {
@@ -18,6 +19,7 @@ const SimpleSliderSetting = (containerEl: HTMLElement, options: SliderOptions, o
 
 export interface SliderOptions {
 	name: string;
+	desc?: string;
 	stepOptions: SliderStepOptions;
 	value: number;
 }

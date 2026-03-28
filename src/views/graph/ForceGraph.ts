@@ -8,6 +8,7 @@ import { NodeGroup } from "../../settings/categories/GroupSettings";
 import { rgba } from "polished";
 import EventBus from "../../util/EventBus";
 import { applyDisplayForces } from "./applyDisplayForces";
+import { stabilizeGraphLayout } from "./stabilizeGraphLayout";
 
 // Adapted from https://github.com/vasturiano/3d-force-graph/blob/master/example/highlight/index.html
 // D3.js 3D Force Graph
@@ -76,7 +77,7 @@ export class ForceGraph {
 			this.graph = this.plugin.globalGraph.clone();
 		}
 
-		return this.graph;
+		return stabilizeGraphLayout(this.graph);
 	};
 
 	private refreshGraphData = () => {
