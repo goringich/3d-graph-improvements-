@@ -52,8 +52,8 @@ export class ForceGraph {
 
 	private createInstance() {
 		const [width, height] = [
-			this.rootHtmlElement.innerWidth,
-			this.rootHtmlElement.innerHeight,
+			this.rootHtmlElement.offsetWidth || this.rootHtmlElement.clientWidth,
+			this.rootHtmlElement.offsetHeight || this.rootHtmlElement.clientHeight,
 		];
 		this.instance = ForceGraph3D()(this.rootHtmlElement)
 			.graphData(this.getGraphData())
@@ -64,7 +64,7 @@ export class ForceGraph {
 			.backgroundColor(rgba(0, 0, 0, 0.0))
 			.width(width)
 			.height(height);
-		this.applyDisplayForces();
+		this.applyDisplayForces(false);
 	}
 
 	private getGraphData = (): Graph => {
@@ -81,7 +81,7 @@ export class ForceGraph {
 
 	private refreshGraphData = () => {
 		this.instance.graphData(this.getGraphData());
-		this.applyDisplayForces();
+		this.applyDisplayForces(false);
 	};
 
 	private onSettingsStateChanged = (data: StateChange) => {
@@ -104,10 +104,11 @@ export class ForceGraph {
 		this.instance.refresh(); // other settings only need a refresh
 	};
 
-	private applyDisplayForces() {
+	private applyDisplayForces(shouldReheat = true) {
 		applyDisplayForces(
 			this.plugin.getSettings().display,
-			this.instance as ForceGraph3DInstance
+			this.instance as ForceGraph3DInstance,
+			shouldReheat
 		);
 	}
 

@@ -9,6 +9,7 @@ export type DisplayForceGraphInstance = {
 export const applyDisplayForces = (
 	displaySettings: DisplaySettings,
 	graphInstance: DisplayForceGraphInstance,
+	shouldReheat = true,
 	logError: (message?: unknown, ...optionalParams: unknown[]) => void = console.error
 ) => {
 	if (!graphInstance?.d3Force) return false;
@@ -25,7 +26,9 @@ export const applyDisplayForces = (
 		chargeForce?.strength?.(nodeRepulsion);
 		linkForce?.distance?.(nodeSpacing);
 		graphInstance.d3VelocityDecay?.(layoutDamping);
-		graphInstance.d3ReheatSimulation?.();
+		if (shouldReheat) {
+			graphInstance.d3ReheatSimulation?.();
+		}
 		return true;
 	} catch (error) {
 		logError("Could not apply display force settings", error);

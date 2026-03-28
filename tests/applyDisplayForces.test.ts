@@ -53,6 +53,29 @@ test("applyDisplayForces returns false when d3Force is unavailable", () => {
 	assert.equal(applied, false);
 });
 
+test("applyDisplayForces can skip reheating during initial graph setup", () => {
+	const displaySettings = new DisplaySettings(4, 5, 6, 4, 45, -90, 0.75);
+	let reheated = false;
+
+	const graphInstance = {
+		d3Force() {
+			return {
+				strength() {},
+				distance() {},
+			};
+		},
+		d3VelocityDecay() {},
+		d3ReheatSimulation() {
+			reheated = true;
+		},
+	};
+
+	const applied = applyDisplayForces(displaySettings, graphInstance, false);
+
+	assert.equal(applied, true);
+	assert.equal(reheated, false);
+});
+
 test("applyDisplayForces catches errors instead of throwing", () => {
 	const displaySettings = new DisplaySettings();
 	const errors: unknown[][] = [];
@@ -62,9 +85,14 @@ test("applyDisplayForces catches errors instead of throwing", () => {
 		},
 	};
 
-	const applied = applyDisplayForces(displaySettings, graphInstance, (...args: unknown[]) => {
-		errors.push(args);
-	});
+	const applied = applyDisplayForces(
+		displaySettings,
+		graphInstance,
+		true,
+		(...args: unknown[]) => {
+			errors.push(args);
+		}
+	);
 
 	assert.equal(applied, false);
 	assert.equal(errors.length, 1);
