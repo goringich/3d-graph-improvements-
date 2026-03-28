@@ -4,6 +4,12 @@ import { ForceGraph } from "./ForceGraph";
 import { GraphSettingsView } from "../settings/GraphSettingsView";
 import Graph3dPlugin from "src/main";
 import { GRAPH_3D_VIEW_TYPE } from "src/main";
+import {
+	restoreIsLocalGraph,
+	serializeGraphViewState,
+	shouldQueueGraphRender,
+	shouldShowGraph,
+} from "./graphViewState";
 
 export class Graph3dView extends ItemView {
 	private forceGraph: ForceGraph;
@@ -29,15 +35,15 @@ export class Graph3dView extends ItemView {
 
 	async onOpen() {
 		await super.onOpen();
-		if (this.plugin.isGraphCacheReady()) {
-			this.showGraph();
-		} else {
+		if (shouldQueueGraphRender(this.plugin.isGraphCacheReady())) {
 			this.plugin.queueGraphView(this);
+		} else {
+			this.showGraph();
 		}
 	}
 
 	showGraph() {
-		if (this.graphShown) return;
+		if (!shouldShowGraph(this.graphShown)) return;
 
 		const viewContent = this.contentEl;
 
@@ -68,14 +74,12 @@ export class Graph3dView extends ItemView {
 		state: { isLocalGraph?: boolean },
 		result: ViewStateResult
 	) {
-		this.isLocalGraph = Boolean(state?.isLocalGraph);
+		this.isLocalGraph = restoreIsLocalGraph(state);
 		await super.setState(state, result);
 	}
 
 	getState() {
-		return {
-			isLocalGraph: this.isLocalGraph,
-		};
+		return serializeGraphViewState(this.isLocalGraph);
 	}
 
 	onResize() {

@@ -7,6 +7,7 @@ import Graph from "../../graph/Graph";
 import { NodeGroup } from "../../settings/categories/GroupSettings";
 import { rgba } from "polished";
 import EventBus from "../../util/EventBus";
+import { applyDisplayForces } from "./applyDisplayForces";
 
 // Adapted from https://github.com/vasturiano/3d-force-graph/blob/master/example/highlight/index.html
 // D3.js 3D Force Graph
@@ -106,27 +107,10 @@ export class ForceGraph {
 	};
 
 	private applyDisplayForces() {
-		const graphInstance = this.instance as ForceGraph3DInstance & {
-			d3Force?: (forceName: string) => unknown;
-			d3ReheatSimulation?: () => void;
-		};
-		if (!graphInstance?.d3Force) return;
-
-		try {
-			const { nodeSpacing, nodeRepulsion } = this.plugin.getSettings().display;
-			const chargeForce = graphInstance.d3Force("charge") as
-				| { strength?: (value: number) => void }
-				| undefined;
-			const linkForce = graphInstance.d3Force("link") as
-				| { distance?: (value: number) => void }
-				| undefined;
-
-			chargeForce?.strength?.(nodeRepulsion);
-			linkForce?.distance?.(nodeSpacing);
-			graphInstance.d3ReheatSimulation?.();
-		} catch (error) {
-			console.error("Could not apply display force settings", error);
-		}
+		applyDisplayForces(
+			this.plugin.getSettings().display,
+			this.instance as ForceGraph3DInstance
+		);
 	}
 
 	public updateDimensions() {
