@@ -16,6 +16,7 @@ export class Graph3dView extends ItemView {
 	private graphShown = false;
 	private isLocalGraph: boolean;
 	private readonly plugin: Graph3dPlugin;
+	private statusEl: HTMLDivElement | null = null;
 
 	constructor(
 		plugin: Graph3dPlugin,
@@ -50,13 +51,23 @@ export class Graph3dView extends ItemView {
 		if (viewContent) {
 			viewContent.empty();
 			viewContent.classList.add("graph-3d-view");
-			this.appendGraph(viewContent);
-			const settings = new GraphSettingsView(
-				this.plugin.settingsState,
-				this.plugin.theme
-			);
-			viewContent.appendChild(settings);
-			this.graphShown = true;
+			this.renderStatus(viewContent, "Preparing 3D graph...");
+			try {
+				this.appendGraph(viewContent);
+				const settings = new GraphSettingsView(
+					this.plugin.settingsState,
+					this.plugin.theme
+				);
+				viewContent.appendChild(settings);
+				this.graphShown = true;
+				this.updateStatus();
+			} catch (error) {
+				console.error("3D Graph view failed to render", error);
+				this.renderStatus(
+					viewContent,
+					`Render failed: ${error instanceof Error ? error.message : String(error)}`
+				);
+			}
 		} else {
 			console.error("Could not find view content");
 		}
@@ -88,11 +99,13 @@ export class Graph3dView extends ItemView {
 	}
 
 	private appendGraph(viewContent: HTMLElement) {
+		this.updateStatus("Creating ForceGraph instance...");
 		this.forceGraph = new ForceGraph(
 			this.plugin,
 			viewContent,
 			this.isLocalGraph
 		);
+		this.updateStatus();
 
 		this.forceGraph
 			.getInstance()
@@ -111,5 +124,26 @@ export class Graph3dView extends ItemView {
 					}
 				}
 			});
+	}
+
+	private renderStatus(containerEl: HTMLElement, text: string) {
+		this.statusEl = containerEl.createDiv({ cls: "graph-3d-status" });
+		this.statusEl.setText(text);
+	}
+
+	private updateStatus(message?: string) {
+		if (!this.statusEl) return;
+		if (message) {
+			this.statusEl.setText(message);
+			return;
+		}
+
+		const graph = this.plugin.globalGraph;
+		const nodeCount = graph?.nodes?.length ?? 0;
+		const linkCount = graph?.links?.length ?? 0;
+		const scope = this.isLocalGraph ? "Local" : "Global";
+		this.statusEl.setText(
+			`${scope} graph ready. Nodes: ${nodeCount}. Links: ${linkCount}.`
+		);
 	}
 }

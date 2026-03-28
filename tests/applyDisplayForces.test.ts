@@ -57,7 +57,7 @@ test("applyDisplayForces catches errors instead of throwing", () => {
 		},
 	};
 
-	const applied = applyDisplayForces(displaySettings, graphInstance, (...args) => {
+	const applied = applyDisplayForces(displaySettings, graphInstance, (...args: unknown[]) => {
 		errors.push(args);
 	});
 
