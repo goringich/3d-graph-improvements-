@@ -6,6 +6,7 @@ import Graph3dPlugin from "src/main";
 
 export class Graph3dView extends ItemView {
 	private forceGraph: ForceGraph;
+	private graphShown = false;
 	private readonly isLocalGraph: boolean;
 	private readonly plugin: Graph3dPlugin;
 
@@ -22,14 +23,23 @@ export class Graph3dView extends ItemView {
 	onunload() {
 		super.onunload();
 		this.forceGraph?.getInstance()._destructor();
+		this.graphShown = false;
+	}
+
+	async onOpen() {
+		await super.onOpen();
+		this.showGraph();
 	}
 
 	showGraph() {
+		if (this.graphShown) return;
+
 		const viewContent = this.containerEl.querySelector(
 			".view-content"
 		) as HTMLElement;
 
 		if (viewContent) {
+			viewContent.empty();
 			viewContent.classList.add("graph-3d-view");
 			this.appendGraph(viewContent);
 			const settings = new GraphSettingsView(
@@ -37,6 +47,7 @@ export class Graph3dView extends ItemView {
 				this.plugin.theme
 			);
 			viewContent.appendChild(settings);
+			this.graphShown = true;
 		} else {
 			console.error("Could not find view content");
 		}
