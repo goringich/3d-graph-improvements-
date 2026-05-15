@@ -58,14 +58,24 @@ export class ForceGraph {
 		];
 		this.instance = ForceGraph3D()(this.rootHtmlElement)
 			.graphData(this.getGraphData())
-			.nodeLabel(
-				(node: Node) => `<div class="node-label">${node.name}</div>`
-			)
+			.nodeLabel((node: Node) => this.getNodePopoverMarkup(node))
 			.nodeRelSize(this.plugin.getSettings().display.nodeSize)
 			.backgroundColor(rgba(0, 0, 0, 0.0))
 			.width(width)
 			.height(height);
 		this.applyDisplayForces(false);
+	}
+
+	private getNodePopoverMarkup(node: Node) {
+		const folderPath = node.path.includes("/")
+			? node.path.slice(0, node.path.lastIndexOf("/"))
+			: "Vault root";
+		return `
+			<div class="graph-3d-node-popover">
+				<div class="graph-3d-node-popover__title">${node.name}</div>
+				<div class="graph-3d-node-popover__meta">${folderPath}</div>
+			</div>
+		`;
 	}
 
 	private getGraphData = (): Graph => {
@@ -152,15 +162,36 @@ export class ForceGraph {
 	private doShowNode = (node: Node) => {
 		return (
 			(this.plugin.getSettings().filters.doShowOrphans ||
-			node.links.length > 0) &&
+				node.links.length > 0) &&
 			(this.plugin.getSettings().filters.doShowAttachments ||
-			!node.isAttachment)
+				!node.isAttachment) &&
+			!this.isExcludedByFolder(node.path)
 		);
 	};
 
 	private doShowLink = (link: Link) => {
-		return this.plugin.getSettings().filters.doShowAttachments || !link.linksAnAttachment
-	}
+		const sourcePath = this.getLinkEndpointPath(link.source);
+		const targetPath = this.getLinkEndpointPath(link.target);
+
+		return (
+			(this.plugin.getSettings().filters.doShowAttachments ||
+				!link.linksAnAttachment) &&
+			!this.isExcludedByFolder(sourcePath) &&
+			!this.isExcludedByFolder(targetPath)
+		);
+	};
+
+	private getLinkEndpointPath = (endpoint: string | Node) => {
+		return typeof endpoint === "string" ? endpoint : endpoint.path;
+	};
+
+	private isExcludedByFolder = (path: string) => {
+		const excludedFolders =
+			this.plugin.getSettings().filters.excludedFolders ?? [];
+		return excludedFolders.some(
+			(folder) => path === folder || path.startsWith(`${folder}/`)
+		);
+	};
 
 	private onNodeHover = (node: Node | null) => {
 		if (

@@ -54,7 +54,7 @@ const GraphDiameterSetting = (
 ) => {
 	const options: SliderOptions = {
 		name: "Graph Diameter",
-		desc: "Overall spread of the graph: higher values push linked nodes farther apart.",
+		desc: "Overall spread of the graph. Higher values push linked nodes farther apart.",
 		value: displaySettings.value.nodeSpacing,
 		stepOptions: {
 			min: 10,

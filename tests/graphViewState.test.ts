@@ -8,6 +8,7 @@ import {
 	shouldShowGraph,
 } from "../src/views/graph/graphViewState.ts";
 import { DisplaySettings } from "../src/settings/categories/DisplaySettings.ts";
+import { FilterSettings } from "../src/settings/categories/FilterSettings.ts";
 
 test("serializeGraphViewState preserves local graph flag", () => {
 	assert.deepEqual(serializeGraphViewState(true), { isLocalGraph: true });
@@ -54,5 +55,28 @@ test("DisplaySettings keeps safe defaults and round-trips new force controls", (
 		nodeSpacing: 55,
 		nodeRepulsion: -80,
 		layoutDamping: 0.75,
+	});
+});
+
+test("FilterSettings keeps excluded folders and restores empty arrays safely", () => {
+	const defaults = new FilterSettings();
+	assert.deepEqual(defaults.excludedFolders, []);
+
+	const restored = FilterSettings.fromStore({
+		doShowOrphans: false,
+		doShowAttachments: true,
+		excludedFolders: ["Templates", "Assets/Images"],
+	});
+
+	assert.equal(restored.doShowOrphans, false);
+	assert.equal(restored.doShowAttachments, true);
+	assert.deepEqual(restored.excludedFolders, [
+		"Templates",
+		"Assets/Images",
+	]);
+	assert.deepEqual(restored.toObject(), {
+		doShowOrphans: false,
+		doShowAttachments: true,
+		excludedFolders: ["Templates", "Assets/Images"],
 	});
 });

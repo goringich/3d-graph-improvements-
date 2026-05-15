@@ -1,10 +1,19 @@
-import {Setting} from "obsidian";
+import { ExtraButtonComponent, Setting } from "obsidian";
 
 const SimpleSliderSetting = (containerEl: HTMLElement, options: SliderOptions, onChange: (newValue: number) => void) => {
 	const slider = new Setting(containerEl)
 		.setName(options.name)
-		.setDesc(options.desc ?? "")
 		.setClass("mod-slider")
+	if (options.desc) {
+		const nameEl = slider.nameEl;
+		nameEl.addClass("graph-setting-name-with-tooltip");
+		nameEl.setAttribute("title", options.desc);
+		new ExtraButtonComponent(nameEl)
+			.setIcon("info")
+			.setTooltip(options.desc)
+			.extraSettingsEl.addClass("graph-setting-info-button");
+	}
+	slider
 		.addSlider(
 			(slider) => {
 				slider.setLimits(options.stepOptions.min, options.stepOptions.max, options.stepOptions.step)

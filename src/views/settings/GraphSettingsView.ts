@@ -3,7 +3,7 @@ import DisplaySettingsView from "./categories/DisplaySettingsView";
 import { FilterSettings } from "../../settings/categories/FilterSettings";
 import { GroupSettings } from "../../settings/categories/GroupSettings";
 import { DisplaySettings } from "../../settings/categories/DisplaySettings";
-import { ExtraButtonComponent } from "obsidian";
+import { App, ExtraButtonComponent } from "obsidian";
 import State, { StateChange } from "../../util/State";
 import EventBus from "../../util/EventBus";
 import GroupSettingsView from "./categories/GroupSettingsView";
@@ -16,11 +16,13 @@ export class GraphSettingsView extends HTMLDivElement {
 	private graphControls: HTMLDivElement;
 	private readonly settingsState: State<GraphSettings>;
 	private readonly theme: ObsidianTheme;
+	private readonly app: App;
 
-	constructor(settingsState: State<GraphSettings>, theme: ObsidianTheme) {
+	constructor(settingsState: State<GraphSettings>, theme: ObsidianTheme, app: App) {
 		super();
 		this.settingsState = settingsState;
 		this.theme = theme;
+		this.app = app;
 	}
 
 	private isCollapsedState = new State(true);
@@ -44,7 +46,8 @@ export class GraphSettingsView extends HTMLDivElement {
 		this.appendSetting(
 			this.settingsState.createSubState("value.filters", FilterSettings),
 			"Filters",
-			FilterSettingsView
+			(setting, containerEl) =>
+				FilterSettingsView(setting, this.app, containerEl)
 		);
 		this.appendSetting(
 			this.settingsState.createSubState("value.groups", GroupSettings),
