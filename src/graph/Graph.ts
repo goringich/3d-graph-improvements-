@@ -2,6 +2,10 @@ import Link from "./Link";
 import Node from "./Node";
 import type { App } from "obsidian";
 import type { IntelligenceProjection } from "../intelligence/Projection";
+import {
+  isDirectedRelation,
+  type GraphDirection,
+} from "../intelligence/GraphSemantics";
 
 const endpointId = (endpoint: string | Node): string => {
   return typeof endpoint === "string" ? endpoint : endpoint.id;
@@ -54,28 +58,8 @@ export default class Graph {
     });
   }
 
-  public getLocalGraph(nodeId: string, depth = 1): Graph {
-    if (!this.getNodeById(nodeId)) {
-      return new Graph([], [], new Map(), new Map());
-    }
-
-    const boundedDepth = Math.max(1, Math.min(6, Math.floor(depth)));
-    const selected = new Set<string>([nodeId]);
-    let frontier = new Set<string>([nodeId]);
-
-    for (let level = 0; level < boundedDepth; level += 1) {
-      const next = new Set<string>();
-      this.links.forEach((link) => {
-        const source = endpointId(link.source as unknown as string | Node);
-        const target = endpointId(link.target as unknown as string | Node);
-        if (frontier.has(source) && !selected.has(target)) next.add(target);
-        if (frontier.has(target) && !selected.has(source)) next.add(source);
-      });
-      next.forEach((id) => selected.add(id));
-      frontier = next;
-      if (!frontier.size) break;
-    }
-
+  public getSubgraph(selectedNodeIds: Iterable<string>): Graph {
+    const selected = new Set(selectedNodeIds);
     const clone = this.clone();
     const nodes = clone.nodes.filter((node) => selected.has(node.id));
     const links = clone.links.filter((link) => {
@@ -106,7 +90,62 @@ export default class Graph {
     return new Graph(nodes, links, nodeIndex, Link.createLinkIndex(links));
   }
 
-  public shortestPath(sourceId: string, targetId: string): string[] {
+  private candidatesFromLink(
+    current: string,
+    link: Link,
+    direction: GraphDirection
+  ): string[] {
+    const source = endpointId(link.source as unknown as string | Node);
+    const target = endpointId(link.target as unknown as string | Node);
+    if (source !== current && target !== current) return [];
+
+    if (!isDirectedRelation(link) || direction === "both") {
+      return [source === current ? target : source];
+    }
+    if (direction === "outgoing" && source === current) return [target];
+    if (direction === "incoming" && target === current) return [source];
+    return [];
+  }
+
+  public neighborhood(
+    nodeId: string,
+    direction: GraphDirection = "both",
+    depth = 1,
+    linkPredicate: (link: Link) => boolean = () => true
+  ): Map<string, number> {
+    if (!this.getNodeById(nodeId)) return new Map();
+    const boundedDepth = Math.max(0, Math.min(6, Math.floor(depth)));
+    const distances = new Map<string, number>([[nodeId, 0]]);
+    let frontier = [nodeId];
+
+    for (let level = 1; level <= boundedDepth; level += 1) {
+      const next: string[] = [];
+      for (const current of frontier) {
+        for (const link of this.getLinksWithNode(current)) {
+          if (!linkPredicate(link)) continue;
+          for (const candidate of this.candidatesFromLink(current, link, direction)) {
+            if (distances.has(candidate)) continue;
+            distances.set(candidate, level);
+            next.push(candidate);
+          }
+        }
+      }
+      frontier = next;
+      if (!frontier.length) break;
+    }
+    return distances;
+  }
+
+  public getLocalGraph(nodeId: string, depth = 1): Graph {
+    return this.getSubgraph(this.neighborhood(nodeId, "both", depth).keys());
+  }
+
+  public shortestPath(
+    sourceId: string,
+    targetId: string,
+    direction: GraphDirection = "both",
+    linkPredicate: (link: Link) => boolean = () => true
+  ): string[] {
     if (!this.getNodeById(sourceId) || !this.getNodeById(targetId)) return [];
     if (sourceId === targetId) return [sourceId];
 
@@ -116,21 +155,21 @@ export default class Graph {
     while (queue.length) {
       const current = queue.shift() as string;
       for (const link of this.getLinksWithNode(current)) {
-        const source = endpointId(link.source as unknown as string | Node);
-        const target = endpointId(link.target as unknown as string | Node);
-        const next = source === current ? target : source;
-        if (previous.has(next)) continue;
-        previous.set(next, current);
-        if (next === targetId) {
-          const path = [targetId];
-          let cursor: string | null = current;
-          while (cursor) {
-            path.push(cursor);
-            cursor = previous.get(cursor) || null;
+        if (!linkPredicate(link)) continue;
+        for (const next of this.candidatesFromLink(current, link, direction)) {
+          if (previous.has(next)) continue;
+          previous.set(next, current);
+          if (next === targetId) {
+            const path = [targetId];
+            let cursor: string | null = current;
+            while (cursor) {
+              path.push(cursor);
+              cursor = previous.get(cursor) || null;
+            }
+            return path.reverse();
           }
-          return path.reverse();
+          queue.push(next);
         }
-        queue.push(next);
       }
     }
 
