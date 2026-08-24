@@ -8,8 +8,13 @@ export type GraphMode =
   | "knowledge"
   | "architecture"
   | "projects"
+  | "runtime"
+  | "ai"
+  | "security"
+  | "dependencies"
   | "live"
-  | "semantic";
+  | "semantic"
+  | "changes";
 
 export interface IntelligenceNodeMetrics {
   degree?: number;
@@ -55,6 +60,8 @@ export interface IntelligenceProjection {
   generated_at: string;
   authority: "projection";
   sources: Record<string, unknown>;
+  counts?: Record<string, number>;
+  changes?: Record<string, unknown>;
   nodes: IntelligenceNodeRecord[];
   edges: IntelligenceEdgeRecord[];
 }
@@ -74,6 +81,20 @@ const asObject = (value: unknown): Record<string, unknown> => {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+};
+
+const searchable = (metadata: NodeIntelligenceMetadata): string => {
+  return [
+    metadata.kind,
+    metadata.source,
+    metadata.state.lifecycle,
+    metadata.state.live,
+    metadata.state.authority,
+    JSON.stringify(metadata.metadata || {}),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 };
 
 export const parseIntelligenceProjection = (
@@ -121,6 +142,15 @@ export const isStructuralNode = (metadata: NodeIntelligenceMetadata): boolean =>
   );
 };
 
+export const isLiveGap = (metadata: NodeIntelligenceMetadata): boolean => {
+  const live = String(metadata.state.live || "").toLowerCase();
+  const freshness = String(metadata.state.freshness || "").toLowerCase();
+  return (
+    ["stale", "unknown", "conflicting", "failed", "blocked_external"].includes(live) ||
+    ["stale", "expired", "unknown"].includes(freshness)
+  );
+};
+
 export const nodeMatchesMode = (
   mode: GraphMode,
   metadata: NodeIntelligenceMetadata
@@ -139,7 +169,42 @@ export const nodeMatchesMode = (
       Boolean(metadata.state.live && metadata.state.live !== "not_applicable")
     );
   }
-  return metadata.source === "semantic" || metadata.metadata.semantic === true;
+  if (mode === "semantic") {
+    return metadata.source === "semantic" || metadata.metadata.semantic === true;
+  }
+  if (mode === "changes") {
+    return ["added", "changed", "removed"].includes(
+      String(metadata.metadata.change || "").toLowerCase()
+    );
+  }
+
+  const text = searchable(metadata);
+  if (mode === "runtime") {
+    return (
+      ["runtime", "service", "container", "endpoint", "host", "deployment", "model"].includes(
+        metadata.kind
+      ) ||
+      metadata.source === "state_graph" ||
+      /runtime|systemd|container|service|host|port|endpoint|deploy/.test(text)
+    );
+  }
+  if (mode === "ai") {
+    return (
+      ["agent", "model", "skill", "technology"].includes(metadata.kind) ||
+      /agent|model|llm|codex|rag|retriev|qdrant|context|router|routing|skill|ollama|openwebui/.test(
+        text
+      )
+    );
+  }
+  if (mode === "security") {
+    return /security|trust|auth|secret|permission|workforce|client|external|owner|boundary|approval/.test(
+      text
+    );
+  }
+  return (
+    !isStructuralNode(metadata) &&
+    ["architecture", "project_reality", "state_graph"].includes(metadata.source)
+  );
 };
 
 export const nodeVisualWeight = (metadata: NodeIntelligenceMetadata): number => {
@@ -156,11 +221,15 @@ export const nodeVisualWeight = (metadata: NodeIntelligenceMetadata): number => 
     project: 9,
     repository: 8,
     incident: 8,
+    service: 7.5,
+    agent: 7.5,
+    model: 7,
   };
   const base = baseByKind[metadata.kind] ?? (metadata.virtual ? 7 : 6);
   const centrality = pagerank * 500 + Math.log2(degree + 1) * 2 + bridge * 8;
   const supportBoost = Math.min(8, Math.log2(support + 1) * 1.4);
-  return Math.max(3, base + Math.min(18, centrality) + supportBoost);
+  const changeBoost = metadata.metadata.change ? 2 : 0;
+  return Math.max(3, base + Math.min(18, centrality) + supportBoost + changeBoost);
 };
 
 export const defaultNodeIntelligence = (): NodeIntelligenceMetadata => ({
