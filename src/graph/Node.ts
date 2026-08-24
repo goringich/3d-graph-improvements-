@@ -1,89 +1,138 @@
 import Link from "./Link";
-import { TFile, getAllTags } from "obsidian";
+import { getAllTags } from "obsidian";
+import type { App, TFile } from "obsidian";
+import {
+  defaultNodeIntelligence,
+  type IntelligenceNodeRecord,
+  type NodeIntelligenceMetadata,
+} from "../intelligence/Projection";
 
 export default class Node {
-	public readonly id: string;
-	public readonly name: string;
-	public readonly path: string;
-	public readonly isAttachment: boolean;
-	public readonly val: number; // = weight, currently = 1 because scaling doesn't work well
+  public readonly id: string;
+  public readonly name: string;
+  public readonly path: string;
+  public readonly isAttachment: boolean;
+  public readonly val: number;
 
-	public readonly neighbors: Node[];
-	public readonly links: Link[];
-	public readonly tags: string[];
+  public readonly neighbors: Node[];
+  public readonly links: Link[];
+  public readonly tags: string[];
+  public readonly intelligence: NodeIntelligenceMetadata;
 
-	constructor(
-		name: string,
-		path: string,
-		isAttachment: boolean,
-		val = 10,
-		neighbors: Node[] = [],
-		links: Link[] = [],
-		tags: string[] = []
-	) {
-		this.id = path;
-		this.name = name;
-		this.path = path;
-		this.isAttachment = isAttachment;
-		this.val = val;
-		this.neighbors = neighbors;
-		this.links = links;
-		this.tags = tags;
-	}
+  constructor(
+    name: string,
+    path: string,
+    isAttachment: boolean,
+    val = 10,
+    neighbors: Node[] = [],
+    links: Link[] = [],
+    tags: string[] = [],
+    intelligence: NodeIntelligenceMetadata = defaultNodeIntelligence()
+  ) {
+    this.id = path;
+    this.name = name;
+    this.path = path;
+    this.isAttachment = isAttachment;
+    this.val = val;
+    this.neighbors = neighbors;
+    this.links = links;
+    this.tags = tags;
+    this.intelligence = intelligence;
+  }
 
-	// Creates an array of nodes from an array of files (from the Obsidian API)
-	static createFromFiles(files: TFile[]): [Node[], Map<string, number>] {
-		const nodeMap = new Map<string, number>();
-		return [
-			files
-				.map((file, index) => {
-					const node = new Node(file.name, file.path, file.extension == "md" ? false : true);
-					const cache = app.metadataCache.getFileCache(file),
-						tags = cache ? getAllTags(cache) : null;
-					if (tags != null) {
-						// stores tags without leading octothorpe `#` as ["tag1", "tag2", ...]
-						tags.forEach((tag) => node.tags.push(tag.substring(1)));
-					}
-					if (!nodeMap.has(node.id)) {
-						nodeMap.set(node.id, index);
-						return node;
-					}
-					return null;
-				})
-				.filter((node) => node !== null) as Node[],
-			nodeMap,
-		];
-	}
+  static createFromFiles(files: TFile[], app: App): [Node[], Map<string, number>] {
+    const nodeMap = new Map<string, number>();
+    const nodes: Node[] = [];
 
-	// Links together two nodes as neighbors (node -> neighbor)
-	addNeighbor(neighbor: Node): Link | null {
-		if (!this.isNeighborOf(neighbor)) {
-			const link = new Link(this.id, neighbor.id, this.isAttachment || neighbor.isAttachment);
-			this.neighbors.push(neighbor);
-			this.addLink(link);
+    files.forEach((file) => {
+      const node = new Node(
+        file.name,
+        file.path,
+        file.extension !== "md",
+        10,
+        [],
+        [],
+        [],
+        {
+          ...defaultNodeIntelligence(),
+          kind: file.extension === "md" ? "note" : "attachment",
+        }
+      );
+      const cache = app.metadataCache.getFileCache(file);
+      const tags = cache ? getAllTags(cache) : null;
+      tags?.forEach((tag) => node.tags.push(tag.substring(1)));
 
-			neighbor.neighbors.push(this);
-			neighbor.addLink(link);
+      if (!nodeMap.has(node.id)) {
+        nodeMap.set(node.id, nodes.length);
+        nodes.push(node);
+      }
+    });
 
-			return link;
-		}
-		return null;
-	}
+    return [nodes, nodeMap];
+  }
 
-	// Pushes a link to the node's links array if it doesn't already exist
-	addLink(link: Link) {
-		if (
-			!this.links.some(
-				(l) => l.source === link.source && l.target === link.target
-			)
-		) {
-			this.links.push(link);
-		}
-	}
+  static createVirtual(record: IntelligenceNodeRecord): Node {
+    return new Node(
+      record.label,
+      record.note_path || record.id,
+      false,
+      10,
+      [],
+      [],
+      [],
+      Node.intelligenceFromRecord(record, true)
+    );
+  }
 
-	// Whether the node is a neighbor of another node
-	public isNeighborOf(node: Node | string) {
-		if (node instanceof Node) return this.neighbors.includes(node);
-		else return this.neighbors.some((neighbor) => neighbor.id === node);
-	}
+  static intelligenceFromRecord(
+    record: IntelligenceNodeRecord,
+    virtual = Boolean(record.virtual)
+  ): NodeIntelligenceMetadata {
+    return {
+      projectionId: record.id,
+      kind: record.kind || "unknown",
+      source: record.source || "unknown",
+      layer: record.layer,
+      virtual,
+      metrics: record.metrics || {},
+      state: record.state || {},
+      metadata: record.metadata || {},
+    };
+  }
+
+  applyIntelligence(record: IntelligenceNodeRecord) {
+    const next = Node.intelligenceFromRecord(record, this.intelligence.virtual);
+    Object.assign(this.intelligence, next);
+  }
+
+  addNeighbor(neighbor: Node, link?: Link): Link | null {
+    if (!this.isNeighborOf(neighbor)) {
+      const createdLink =
+        link || new Link(this.id, neighbor.id, this.isAttachment || neighbor.isAttachment);
+      this.neighbors.push(neighbor);
+      this.addLink(createdLink);
+
+      neighbor.neighbors.push(this);
+      neighbor.addLink(createdLink);
+
+      return createdLink;
+    }
+    return null;
+  }
+
+  addLink(link: Link) {
+    if (
+      !this.links.some(
+        (candidate) =>
+          candidate.source === link.source && candidate.target === link.target
+      )
+    ) {
+      this.links.push(link);
+    }
+  }
+
+  public isNeighborOf(node: Node | string) {
+    if (node instanceof Node) return this.neighbors.includes(node);
+    return this.neighbors.some((neighbor) => neighbor.id === node);
+  }
 }
