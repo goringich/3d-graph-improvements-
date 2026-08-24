@@ -10,9 +10,16 @@ import EventBus from "../../util/EventBus";
 import { applyDisplayForces } from "./applyDisplayForces";
 import { stabilizeGraphLayout } from "./stabilizeGraphLayout";
 import {
+  isStructuralNode,
   nodeMatchesMode,
   nodeVisualWeight,
 } from "../../intelligence/Projection";
+import {
+  isStructuralKind,
+  linkArrowLength,
+  linkCurvature,
+  linkWidthMultiplier,
+} from "../../intelligence/VisualEncoding";
 
 const endpointId = (endpoint: string | Node): string => {
   return typeof endpoint === "string" ? endpoint : endpoint.id;
@@ -30,6 +37,12 @@ const escapeHtml = (value: string): string => {
         '"': "&quot;",
       }[char] || char)
   );
+};
+
+const metadataText = (value: unknown): string => {
+  return typeof value === "string" || typeof value === "number"
+    ? String(value)
+    : "";
 };
 
 export class ForceGraph {
@@ -88,15 +101,23 @@ export class ForceGraph {
 
   private getNodeLabel(node: Node): string {
     const intel = node.intelligence;
+    const role = metadataText(intel.metadata.role || intel.metadata.hub_role);
+    const support = metadataText(intel.metadata.support);
+    const degree = Number(intel.metrics.degree || 0);
+    const bridge = Number(intel.metrics.bridge_score || 0);
     const details = [
       intel.kind,
+      role ? `role: ${role}` : "",
+      support ? `support: ${support}` : "",
+      degree ? `degree: ${degree}` : "",
+      bridge >= 0.25 ? `bridge: ${bridge.toFixed(2)}` : "",
       intel.state.live ? `live: ${intel.state.live}` : "",
       intel.state.freshness ? `freshness: ${intel.state.freshness}` : "",
       intel.state.authority ? `authority: ${intel.state.authority}` : "",
     ].filter(Boolean);
     return `<div class="node-label"><strong>${escapeHtml(
       node.name
-    )}</strong>${details.length ? `<br>${details.map(escapeHtml).join(" · ")}` : ""}</div>`;
+    )}</strong>${details.length ? `<br>${details.map((value) => escapeHtml(String(value))).join(" · ")}` : ""}</div>`;
   }
 
   private getGraphData = (): Graph => {
@@ -190,6 +211,11 @@ export class ForceGraph {
       return this.plugin.theme.textFaint;
     }
 
+    if (node.intelligence.kind === "folder") return this.plugin.theme.textFaint;
+    if (node.intelligence.kind === "tag") return this.plugin.theme.textMuted;
+    if (node.intelligence.source === "architecture") return this.plugin.theme.textAccent;
+    if (node.intelligence.source === "project_reality") return this.plugin.theme.textNormal;
+
     let color = node.intelligence.virtual
       ? this.plugin.theme.textNormal
       : this.plugin.theme.textMuted;
@@ -201,11 +227,16 @@ export class ForceGraph {
 
   private doShowNode = (node: Node) => {
     const filters = this.plugin.getSettings().filters;
+    const semanticMode = filters.graphMode === "semantic";
+    const hasSemanticEdge = node.links.some((link) => link.intelligence.semantic);
     return (
       (filters.doShowOrphans || node.links.length > 0) &&
       (filters.doShowAttachments || !node.isAttachment) &&
       (filters.doShowVirtualNodes || !node.intelligence.virtual) &&
-      nodeMatchesMode(filters.graphMode, node.intelligence)
+      (filters.doShowStructureNodes || !isStructuralNode(node.intelligence)) &&
+      (semanticMode
+        ? filters.doShowSemanticEdges && hasSemanticEdge
+        : nodeMatchesMode(filters.graphMode, node.intelligence))
     );
   };
 
@@ -213,6 +244,10 @@ export class ForceGraph {
     const filters = this.plugin.getSettings().filters;
     if (!filters.doShowAttachments && link.linksAnAttachment) return false;
     if (!filters.doShowSemanticEdges && link.intelligence.semantic) return false;
+    if (!filters.doShowStructureNodes && isStructuralKind(link.intelligence.kind)) {
+      return false;
+    }
+    if (filters.graphMode === "semantic" && !link.intelligence.semantic) return false;
 
     const source = this.graph.getNodeById(
       endpointId(link.source as unknown as string | Node)
@@ -254,13 +289,48 @@ export class ForceGraph {
 
   private getLinkWidth(link: Link): number {
     const base = this.plugin.getSettings().display.linkThickness;
-    if (link.intelligence.semantic) return Math.max(0.5, base * 0.35);
-    return this.isHighlightedLink(link) ? base * 1.5 : base;
+    const signal = linkWidthMultiplier(link.intelligence);
+    return Math.max(0.35, base * signal * (this.isHighlightedLink(link) ? 1.75 : 1));
   }
+
+  private getLinkColor = (link: Link): string => {
+    if (this.isHighlightedLink(link)) return this.plugin.theme.textAccent;
+    const kind = link.intelligence.kind.toLowerCase();
+    if (kind === "has_incident") {
+      return this.plugin.theme.backgroundModifierError || this.plugin.theme.textAccent;
+    }
+    if (link.intelligence.semantic || isStructuralKind(kind)) {
+      return this.plugin.theme.textFaint;
+    }
+    if (link.intelligence.sourceClass === "architecture") {
+      return this.plugin.theme.textAccent;
+    }
+    if (link.intelligence.sourceClass === "state_graph") {
+      return this.plugin.theme.backgroundModifierSuccess || this.plugin.theme.textNormal;
+    }
+    if (link.intelligence.sourceClass === "project_reality") {
+      return this.plugin.theme.textNormal;
+    }
+    return this.plugin.theme.textMuted;
+  };
+
+  private getLinkLabel = (link: Link): string => {
+    const details = [
+      link.intelligence.kind,
+      link.intelligence.confidence ? `confidence: ${link.intelligence.confidence}` : "",
+      link.intelligence.sourceClass ? `source: ${link.intelligence.sourceClass}` : "",
+    ].filter(Boolean);
+    return `<div class="node-label">${details.map((value) => escapeHtml(String(value))).join(" · ")}</div>`;
+  };
 
   private createLinks = () => {
     this.instance
+      .linkLabel((link: Link) => this.getLinkLabel(link))
       .linkWidth((link: Link) => this.getLinkWidth(link))
+      .linkCurvature((link: Link) => linkCurvature(link.intelligence))
+      .linkDirectionalArrowLength((link: Link) => linkArrowLength(link.intelligence))
+      .linkDirectionalArrowRelPos(0.86)
+      .linkDirectionalArrowColor((link: Link) => this.getLinkColor(link))
       .linkDirectionalParticles((link: Link) =>
         this.isHighlightedLink(link) && !link.intelligence.semantic
           ? this.plugin.getSettings().display.particleCount
@@ -269,14 +339,10 @@ export class ForceGraph {
       .linkDirectionalParticleWidth(
         this.plugin.getSettings().display.particleSize
       )
+      .linkDirectionalParticleColor((link: Link) => this.getLinkColor(link))
       .linkVisibility(this.doShowLink)
       .onLinkHover(this.onLinkHover)
-      .linkColor((link: Link) => {
-        if (this.isHighlightedLink(link)) return this.plugin.theme.textAccent;
-        return link.intelligence.semantic
-          ? this.plugin.theme.textFaint
-          : this.plugin.theme.textMuted;
-      });
+      .linkColor((link: Link) => this.getLinkColor(link));
   };
 
   private onLinkHover = (link: Link | null) => {
@@ -303,6 +369,8 @@ export class ForceGraph {
     this.instance
       .nodeColor(this.instance.nodeColor())
       .linkColor(this.instance.linkColor())
+      .linkWidth(this.instance.linkWidth())
+      .linkDirectionalArrowColor(this.instance.linkDirectionalArrowColor())
       .linkDirectionalParticles(this.instance.linkDirectionalParticles());
   }
 
