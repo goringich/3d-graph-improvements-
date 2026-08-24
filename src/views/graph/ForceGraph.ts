@@ -14,6 +14,7 @@ import {
   nodeMatchesMode,
   nodeVisualWeight,
 } from "../../intelligence/Projection";
+import { intelligenceNodeColor } from "../../intelligence/VisualPalette";
 import {
   isStructuralKind,
   linkArrowLength,
@@ -220,8 +221,12 @@ export class ForceGraph {
     }
 
     const change = String(node.intelligence.metadata.change || "");
-    if (change === "removed") return this.plugin.theme.backgroundModifierError || this.plugin.theme.textFaint;
-    if (change === "added") return this.plugin.theme.backgroundModifierSuccess || this.plugin.theme.textAccent;
+    if (change === "removed") {
+      return this.plugin.theme.backgroundModifierError || this.plugin.theme.textFaint;
+    }
+    if (change === "added") {
+      return this.plugin.theme.backgroundModifierSuccess || this.plugin.theme.textAccent;
+    }
 
     const live = node.intelligence.state.live || "";
     if (live === "conflicting" || live === "failed") {
@@ -234,14 +239,7 @@ export class ForceGraph {
       return this.plugin.theme.textFaint;
     }
 
-    if (node.intelligence.kind === "folder") return this.plugin.theme.textFaint;
-    if (node.intelligence.kind === "tag") return this.plugin.theme.textMuted;
-    if (node.intelligence.source === "architecture") return this.plugin.theme.textAccent;
-    if (node.intelligence.source === "project_reality") return this.plugin.theme.textNormal;
-
-    let color = node.intelligence.virtual
-      ? this.plugin.theme.textNormal
-      : this.plugin.theme.textMuted;
+    let color = intelligenceNodeColor(node.intelligence);
     this.plugin.getSettings().groups.groups.forEach((group) => {
       if (NodeGroup.matches(group.query, node)) color = group.color;
     });
@@ -275,7 +273,7 @@ export class ForceGraph {
 
     const sceneSize = this.graph?.nodes.length || 0;
     if (
-      sceneSize > 2500 &&
+      sceneSize > 6000 &&
       !this.isHighlightedLink(link) &&
       (link.intelligence.semantic || isStructuralKind(link.intelligence.kind))
     ) {
