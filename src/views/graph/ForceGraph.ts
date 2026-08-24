@@ -9,239 +9,308 @@ import { rgba } from "polished";
 import EventBus from "../../util/EventBus";
 import { applyDisplayForces } from "./applyDisplayForces";
 import { stabilizeGraphLayout } from "./stabilizeGraphLayout";
+import {
+  nodeMatchesMode,
+  nodeVisualWeight,
+} from "../../intelligence/Projection";
 
-// Adapted from https://github.com/vasturiano/3d-force-graph/blob/master/example/highlight/index.html
-// D3.js 3D Force Graph
+const endpointId = (endpoint: string | Node): string => {
+  return typeof endpoint === "string" ? endpoint : endpoint.id;
+};
+
+const escapeHtml = (value: string): string => {
+  return value.replace(
+    /[&<>'"]/g,
+    (char) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "'": "&#39;",
+        '"': "&quot;",
+      }[char] || char)
+  );
+};
 
 export class ForceGraph {
-	private instance: ForceGraph3DInstance;
-	private readonly rootHtmlElement: HTMLElement;
+  private instance: ForceGraph3DInstance;
+  private readonly rootHtmlElement: HTMLElement;
 
-	private readonly highlightedNodes: Set<string> = new Set();
-	private readonly highlightedLinks: Set<Link> = new Set();
-	hoveredNode: Node | null;
+  private readonly highlightedNodes: Set<string> = new Set();
+  private readonly highlightedLinks: Set<Link> = new Set();
+  hoveredNode: Node | null;
 
-	private readonly isLocalGraph: boolean;
-	private graph: Graph;
-	private readonly plugin: Graph3dPlugin;
+  private readonly isLocalGraph: boolean;
+  private graph: Graph;
+  private readonly plugin: Graph3dPlugin;
 
-	constructor(
-		plugin: Graph3dPlugin,
-		rootHtmlElement: HTMLElement,
-		isLocalGraph: boolean
-	) {
-		this.rootHtmlElement = rootHtmlElement;
-		this.isLocalGraph = isLocalGraph;
-		this.plugin = plugin;
+  constructor(
+    plugin: Graph3dPlugin,
+    rootHtmlElement: HTMLElement,
+    isLocalGraph: boolean
+  ) {
+    this.rootHtmlElement = rootHtmlElement;
+    this.isLocalGraph = isLocalGraph;
+    this.plugin = plugin;
 
-		this.createGraph();
-		this.initListeners();
-	}
+    this.createGraph();
+    this.initListeners();
+  }
 
-	private initListeners() {
-		this.plugin.settingsState.onChange(this.onSettingsStateChanged);
-		if (this.isLocalGraph)
-			this.plugin.openFileState.onChange(this.refreshGraphData);
-		EventBus.on("graph-changed", this.refreshGraphData);
-	}
+  private initListeners() {
+    this.plugin.settingsState.onChange(this.onSettingsStateChanged);
+    if (this.isLocalGraph) {
+      this.plugin.openFileState.onChange(this.refreshGraphData);
+    }
+    EventBus.on("graph-changed", this.refreshGraphData);
+  }
 
-	private createGraph() {
-		this.createInstance();
-		this.createNodes();
-		this.createLinks();
-	}
+  private createGraph() {
+    this.createInstance();
+    this.createNodes();
+    this.createLinks();
+  }
 
-	private createInstance() {
-		const [width, height] = [
-			this.rootHtmlElement.offsetWidth || this.rootHtmlElement.clientWidth,
-			this.rootHtmlElement.offsetHeight || this.rootHtmlElement.clientHeight,
-		];
-		this.instance = ForceGraph3D()(this.rootHtmlElement)
-			.graphData(this.getGraphData())
-			.nodeLabel(
-				(node: Node) => `<div class="node-label">${node.name}</div>`
-			)
-			.nodeRelSize(this.plugin.getSettings().display.nodeSize)
-			.backgroundColor(rgba(0, 0, 0, 0.0))
-			.width(width)
-			.height(height);
-		this.applyDisplayForces(false);
-	}
+  private createInstance() {
+    const [width, height] = [
+      this.rootHtmlElement.offsetWidth || this.rootHtmlElement.clientWidth,
+      this.rootHtmlElement.offsetHeight || this.rootHtmlElement.clientHeight,
+    ];
+    this.instance = ForceGraph3D()(this.rootHtmlElement)
+      .graphData(this.getGraphData())
+      .nodeLabel((node: Node) => this.getNodeLabel(node))
+      .nodeRelSize(this.plugin.getSettings().display.nodeSize)
+      .backgroundColor(rgba(0, 0, 0, 0.0))
+      .width(width)
+      .height(height);
+    this.applyDisplayForces(false);
+  }
 
-	private getGraphData = (): Graph => {
-		if (this.isLocalGraph && this.plugin.openFileState.value) {
-			this.graph = this.plugin.globalGraph
-				.clone()
-				.getLocalGraph(this.plugin.openFileState.value);
-		} else {
-			this.graph = this.plugin.globalGraph.clone();
-		}
+  private getNodeLabel(node: Node): string {
+    const intel = node.intelligence;
+    const details = [
+      intel.kind,
+      intel.state.live ? `live: ${intel.state.live}` : "",
+      intel.state.freshness ? `freshness: ${intel.state.freshness}` : "",
+      intel.state.authority ? `authority: ${intel.state.authority}` : "",
+    ].filter(Boolean);
+    return `<div class="node-label"><strong>${escapeHtml(
+      node.name
+    )}</strong>${details.length ? `<br>${details.map(escapeHtml).join(" · ")}` : ""}</div>`;
+  }
 
-		return stabilizeGraphLayout(this.graph);
-	};
+  private getGraphData = (): Graph => {
+    if (this.isLocalGraph && this.plugin.openFileState.value) {
+      this.graph = this.plugin.globalGraph
+        .clone()
+        .getLocalGraph(
+          this.plugin.openFileState.value,
+          this.plugin.getSettings().filters.localDepth
+        );
+    } else {
+      this.graph = this.plugin.globalGraph.clone();
+    }
 
-	private refreshGraphData = () => {
-		this.instance.graphData(this.getGraphData());
-		this.applyDisplayForces(false);
-	};
+    return stabilizeGraphLayout(this.graph);
+  };
 
-	private onSettingsStateChanged = (data: StateChange) => {
-		if (data.currentPath === "display.nodeSize") {
-			this.instance.nodeRelSize(data.newValue);
-		} else if (
-			data.currentPath === "display.nodeSpacing" ||
-			data.currentPath === "display.nodeRepulsion" ||
-			data.currentPath === "display.layoutDamping"
-		) {
-			this.applyDisplayForces();
-		} else if (data.currentPath === "display.linkWidth") {
-			this.instance.linkWidth(data.newValue);
-		} else if (data.currentPath === "display.particleSize") {
-			this.instance.linkDirectionalParticleWidth(
-				this.plugin.getSettings().display.particleSize
-			);
-		}
+  private refreshGraphData = () => {
+    this.instance.graphData(this.getGraphData());
+    this.applyDisplayForces(false);
+    this.instance.refresh();
+  };
 
-		this.instance.refresh(); // other settings only need a refresh
-	};
+  private onSettingsStateChanged = (data: StateChange) => {
+    if (data.currentPath === "display.nodeSize") {
+      this.instance.nodeRelSize(data.newValue);
+    } else if (
+      data.currentPath === "display.nodeSpacing" ||
+      data.currentPath === "display.nodeRepulsion" ||
+      data.currentPath === "display.layoutDamping"
+    ) {
+      this.applyDisplayForces();
+    } else if (data.currentPath === "display.linkThickness") {
+      this.instance.linkWidth((link: Link) => this.getLinkWidth(link));
+    } else if (data.currentPath === "display.particleSize") {
+      this.instance.linkDirectionalParticleWidth(
+        this.plugin.getSettings().display.particleSize
+      );
+    } else if (data.currentPath === "filters.localDepth") {
+      this.refreshGraphData();
+      return;
+    }
 
-	private applyDisplayForces(shouldReheat = true) {
-		applyDisplayForces(
-			this.plugin.getSettings().display,
-			this.instance as ForceGraph3DInstance,
-			shouldReheat
-		);
-	}
+    this.instance.refresh();
+  };
 
-	public updateDimensions() {
-		const [width, height] = [
-			this.rootHtmlElement.offsetWidth,
-			this.rootHtmlElement.offsetHeight,
-		];
-		this.setDimensions(width, height);
-	}
+  private applyDisplayForces(shouldReheat = true) {
+    applyDisplayForces(
+      this.plugin.getSettings().display,
+      this.instance as ForceGraph3DInstance,
+      shouldReheat
+    );
+  }
 
-	public setDimensions(width: number, height: number) {
-		this.instance.width(width);
-		this.instance.height(height);
-	}
+  public updateDimensions() {
+    const [width, height] = [
+      this.rootHtmlElement.offsetWidth,
+      this.rootHtmlElement.offsetHeight,
+    ];
+    this.setDimensions(width, height);
+  }
 
-	private createNodes = () => {
-		this.instance
-			.nodeColor((node: Node) => this.getNodeColor(node))
-			.nodeVisibility(this.doShowNode)
-			.onNodeHover(this.onNodeHover);
-	};
+  public setDimensions(width: number, height: number) {
+    this.instance.width(width);
+    this.instance.height(height);
+  }
 
-	private getNodeColor = (node: Node): string => {
-		if (this.isHighlightedNode(node)) {
-			// Node is highlighted
-			return node === this.hoveredNode
-				? this.plugin.theme.interactiveAccentHover
-				: this.plugin.theme.textAccent;
-		} else {
-			let color = this.plugin.theme.textMuted;
-			this.plugin.getSettings().groups.groups.forEach((group) => {
-				// multiple groups -> last match wins
-				if (NodeGroup.matches(group.query, node)) color = group.color;
-			});
-			return color;
-		}
-	};
+  private createNodes = () => {
+    this.instance
+      .nodeColor((node: Node) => this.getNodeColor(node))
+      .nodeVal((node: Node) => nodeVisualWeight(node.intelligence))
+      .nodeVisibility(this.doShowNode)
+      .onNodeHover(this.onNodeHover);
+  };
 
-	private doShowNode = (node: Node) => {
-		return (
-			(this.plugin.getSettings().filters.doShowOrphans ||
-			node.links.length > 0) &&
-			(this.plugin.getSettings().filters.doShowAttachments ||
-			!node.isAttachment)
-		);
-	};
+  private getNodeColor = (node: Node): string => {
+    if (this.isHighlightedNode(node)) {
+      return node === this.hoveredNode
+        ? this.plugin.theme.interactiveAccentHover
+        : this.plugin.theme.textAccent;
+    }
 
-	private doShowLink = (link: Link) => {
-		return this.plugin.getSettings().filters.doShowAttachments || !link.linksAnAttachment
-	}
+    const live = node.intelligence.state.live || "";
+    if (live === "conflicting" || live === "failed") {
+      return this.plugin.theme.backgroundModifierError || this.plugin.theme.textAccent;
+    }
+    if (live === "verified_live" || live === "verified_current") {
+      return this.plugin.theme.backgroundModifierSuccess || this.plugin.theme.textNormal;
+    }
+    if (live === "stale" || live === "unknown") {
+      return this.plugin.theme.textFaint;
+    }
 
-	private onNodeHover = (node: Node | null) => {
-		if (
-			(!node && !this.highlightedNodes.size) ||
-			(node && this.hoveredNode === node)
-		)
-			return;
+    let color = node.intelligence.virtual
+      ? this.plugin.theme.textNormal
+      : this.plugin.theme.textMuted;
+    this.plugin.getSettings().groups.groups.forEach((group) => {
+      if (NodeGroup.matches(group.query, node)) color = group.color;
+    });
+    return color;
+  };
 
-		this.clearHighlights();
+  private doShowNode = (node: Node) => {
+    const filters = this.plugin.getSettings().filters;
+    return (
+      (filters.doShowOrphans || node.links.length > 0) &&
+      (filters.doShowAttachments || !node.isAttachment) &&
+      (filters.doShowVirtualNodes || !node.intelligence.virtual) &&
+      nodeMatchesMode(filters.graphMode, node.intelligence)
+    );
+  };
 
-		if (node) {
-			this.highlightedNodes.add(node.id);
-			node.neighbors.forEach((neighbor) =>
-				this.highlightedNodes.add(neighbor.id)
-			);
-			const nodeLinks = this.graph.getLinksWithNode(node.id);
+  private doShowLink = (link: Link) => {
+    const filters = this.plugin.getSettings().filters;
+    if (!filters.doShowAttachments && link.linksAnAttachment) return false;
+    if (!filters.doShowSemanticEdges && link.intelligence.semantic) return false;
 
-			if (nodeLinks)
-				nodeLinks.forEach((link) => this.highlightedLinks.add(link));
-		}
-		this.hoveredNode = node ?? null;
-		this.updateHighlight();
-	};
+    const source = this.graph.getNodeById(
+      endpointId(link.source as unknown as string | Node)
+    );
+    const target = this.graph.getNodeById(
+      endpointId(link.target as unknown as string | Node)
+    );
+    return Boolean(source && target && this.doShowNode(source) && this.doShowNode(target));
+  };
 
-	private isHighlightedLink = (link: Link): boolean => {
-		return this.highlightedLinks.has(link);
-	};
+  private onNodeHover = (node: Node | null) => {
+    if (
+      (!node && !this.highlightedNodes.size) ||
+      (node && this.hoveredNode === node)
+    ) {
+      return;
+    }
 
-	private isHighlightedNode = (node: Node): boolean => {
-		return this.highlightedNodes.has(node.id);
-	};
+    this.clearHighlights();
 
-	private createLinks = () => {
-		this.instance
-			.linkWidth((link: Link) =>
-				this.isHighlightedLink(link)
-					? this.plugin.getSettings().display.linkThickness * 1.5
-					: this.plugin.getSettings().display.linkThickness
-			)
-			.linkDirectionalParticles((link: Link) =>
-				this.isHighlightedLink(link)
-					? this.plugin.getSettings().display.particleCount
-					: 0
-			)
-			.linkDirectionalParticleWidth(
-				this.plugin.getSettings().display.particleSize
-			)
-			.linkVisibility(this.doShowLink)
-			.onLinkHover(this.onLinkHover)
-			.linkColor((link: Link) =>
-				this.isHighlightedLink(link)
-					? this.plugin.theme.textAccent
-					: this.plugin.theme.textMuted
-			);
-	};
+    if (node) {
+      this.highlightedNodes.add(node.id);
+      node.neighbors.forEach((neighbor) => this.highlightedNodes.add(neighbor.id));
+      this.graph
+        .getLinksWithNode(node.id)
+        .forEach((link) => this.highlightedLinks.add(link));
+    }
+    this.hoveredNode = node ?? null;
+    this.updateHighlight();
+  };
 
-	private onLinkHover = (link: Link | null) => {
-		this.clearHighlights();
+  private isHighlightedLink = (link: Link): boolean => {
+    return this.highlightedLinks.has(link);
+  };
 
-		if (link) {
-			this.highlightedLinks.add(link);
-			this.highlightedNodes.add(link.source);
-			this.highlightedNodes.add(link.target);
-		}
-		this.updateHighlight();
-	};
+  private isHighlightedNode = (node: Node): boolean => {
+    return this.highlightedNodes.has(node.id);
+  };
 
-	private clearHighlights = () => {
-		this.highlightedNodes.clear();
-		this.highlightedLinks.clear();
-	};
+  private getLinkWidth(link: Link): number {
+    const base = this.plugin.getSettings().display.linkThickness;
+    if (link.intelligence.semantic) return Math.max(0.5, base * 0.35);
+    return this.isHighlightedLink(link) ? base * 1.5 : base;
+  }
 
-	private updateHighlight() {
-		// trigger update of highlighted objects in scene
-		this.instance
-			.nodeColor(this.instance.nodeColor())
-			.linkColor(this.instance.linkColor())
-			.linkDirectionalParticles(this.instance.linkDirectionalParticles());
-	}
+  private createLinks = () => {
+    this.instance
+      .linkWidth((link: Link) => this.getLinkWidth(link))
+      .linkDirectionalParticles((link: Link) =>
+        this.isHighlightedLink(link) && !link.intelligence.semantic
+          ? this.plugin.getSettings().display.particleCount
+          : 0
+      )
+      .linkDirectionalParticleWidth(
+        this.plugin.getSettings().display.particleSize
+      )
+      .linkVisibility(this.doShowLink)
+      .onLinkHover(this.onLinkHover)
+      .linkColor((link: Link) => {
+        if (this.isHighlightedLink(link)) return this.plugin.theme.textAccent;
+        return link.intelligence.semantic
+          ? this.plugin.theme.textFaint
+          : this.plugin.theme.textMuted;
+      });
+  };
 
-	getInstance(): ForceGraph3DInstance {
-		return this.instance;
-	}
+  private onLinkHover = (link: Link | null) => {
+    this.clearHighlights();
+
+    if (link) {
+      this.highlightedLinks.add(link);
+      this.highlightedNodes.add(
+        endpointId(link.source as unknown as string | Node)
+      );
+      this.highlightedNodes.add(
+        endpointId(link.target as unknown as string | Node)
+      );
+    }
+    this.updateHighlight();
+  };
+
+  private clearHighlights = () => {
+    this.highlightedNodes.clear();
+    this.highlightedLinks.clear();
+  };
+
+  private updateHighlight() {
+    this.instance
+      .nodeColor(this.instance.nodeColor())
+      .linkColor(this.instance.linkColor())
+      .linkDirectionalParticles(this.instance.linkDirectionalParticles());
+  }
+
+  getInstance(): ForceGraph3DInstance {
+    return this.instance;
+  }
+
+  getGraph(): Graph {
+    return this.graph;
+  }
 }
