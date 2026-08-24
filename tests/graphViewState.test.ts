@@ -27,11 +27,11 @@ test("graph render decisions are deterministic", () => {
 	assert.equal(shouldShowGraph(true), false);
 });
 
-test("DisplaySettings keeps safe defaults and round-trips new force controls", () => {
+test("DisplaySettings keeps wider safe defaults and round-trips force controls", () => {
 	const defaults = new DisplaySettings();
-	assert.equal(defaults.nodeSpacing, 30);
-	assert.equal(defaults.nodeRepulsion, -60);
-	assert.equal(defaults.layoutDamping, 0.6);
+	assert.equal(defaults.nodeSpacing, 38);
+	assert.equal(defaults.nodeRepulsion, -72);
+	assert.equal(defaults.layoutDamping, 0.58);
 
 	const restored = DisplaySettings.fromStore({
 		nodeSize: 3,
