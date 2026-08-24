@@ -1,5 +1,32 @@
 import type { DisplaySettings } from "../../settings/categories/DisplaySettings";
-import { relationSpacingMultiplier } from "../../intelligence/VisualEncoding";
+
+export type RelationSpacingMetadata = {
+  kind?: string;
+  semantic?: boolean;
+};
+
+export const relationSpacingMultiplier = (
+  metadata?: RelationSpacingMetadata
+): number => {
+  const kind = String(metadata?.kind || "").trim().toLowerCase();
+  if (kind === "in_folder") return 0.68;
+  if (kind === "tagged_with") return 0.78;
+  if (kind === "parent_folder") return 0.9;
+  if (kind === "wikilink") return 1;
+  if (kind === "contains") return 1.08;
+  if (
+    kind === "imports" ||
+    kind === "calls" ||
+    kind === "handled_by" ||
+    kind === "reads_writes" ||
+    kind === "verified_by"
+  ) {
+    return 1.16;
+  }
+  if (kind === "observed_as" || kind === "has_incident") return 1.22;
+  if (metadata?.semantic || kind === "semantic_related") return 1.48;
+  return 1.1;
+};
 
 export type DisplayForceGraphInstance = {
   d3Force?: (forceName: string) => unknown;
@@ -23,23 +50,14 @@ export const applyDisplayForces = (
     const linkForce = graphInstance.d3Force("link") as
       | {
           distance?: (
-            value: number | ((link: { intelligence?: Record<string, unknown> }) => number)
+            value: number | ((link: { intelligence?: RelationSpacingMetadata }) => number)
           ) => void;
         }
       | undefined;
 
     chargeForce?.strength?.(nodeRepulsion);
     linkForce?.distance?.((link) => {
-      const intelligence = link?.intelligence as
-        | {
-            kind?: string;
-            sourceClass?: string;
-            confidence?: string;
-            semantic?: boolean;
-            metadata?: Record<string, unknown>;
-          }
-        | undefined;
-      return nodeSpacing * relationSpacingMultiplier(intelligence);
+      return nodeSpacing * relationSpacingMultiplier(link?.intelligence);
     });
     graphInstance.d3VelocityDecay?.(layoutDamping);
     if (shouldReheat) {
