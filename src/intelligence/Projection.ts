@@ -156,6 +156,8 @@ export const nodeMatchesMode = (
   mode: GraphMode,
   metadata: NodeIntelligenceMetadata
 ): boolean => {
+  const change = String(metadata.metadata.change || "").toLowerCase();
+  if (change === "removed" && mode !== "changes") return false;
   if (mode === "all") return true;
   if (mode === "knowledge") {
     return metadata.kind === "note" || isStructuralNode(metadata);
@@ -174,9 +176,7 @@ export const nodeMatchesMode = (
     return metadata.source === "semantic" || metadata.metadata.semantic === true;
   }
   if (mode === "changes") {
-    return ["added", "changed", "removed"].includes(
-      String(metadata.metadata.change || "").toLowerCase()
-    );
+    return ["added", "changed", "removed"].includes(change);
   }
 
   const text = searchable(metadata);
