@@ -1,9 +1,9 @@
 {
-	"id": "3d-graph",
-	"name": "3D Graph",
-	"version": "1.0.5",
-	"description": "A 3D Graph for Obsidian",
-	"author": "Alexander Weichart",
-	"authorUrl": "https://github.com/AlexW00",
-	"isDesktopOnly": false
+  "id": "3d-graph",
+  "name": "3D Intelligence Graph",
+  "version": "1.1.0",
+  "description": "A typed 3D knowledge and AI-OS intelligence graph for Obsidian",
+  "author": "Alexander Weichart, LOCAL AI OS extensions by goringich",
+  "authorUrl": "https://github.com/goringich/3d-graph-improvements-",
+  "isDesktopOnly": false
 }
