@@ -3,9 +3,9 @@ export class DisplaySettings {
 	linkThickness = 5;
 	particleSize = 6;
 	particleCount = 4;
-	nodeSpacing = 30;
-	nodeRepulsion = -60;
-	layoutDamping = 0.6;
+	nodeSpacing = 38;
+	nodeRepulsion = -72;
+	layoutDamping = 0.58;
 
 	constructor(
 		nodeSize?: number,
