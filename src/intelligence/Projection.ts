@@ -60,8 +60,9 @@ export interface IntelligenceProjection {
   generated_at: string;
   authority: "projection";
   sources: Record<string, unknown>;
-  counts?: Record<string, number>;
+  counts?: Record<string, unknown>;
   changes?: Record<string, unknown>;
+  graph_quality?: Record<string, unknown>;
   nodes: IntelligenceNodeRecord[];
   edges: IntelligenceEdgeRecord[];
 }
