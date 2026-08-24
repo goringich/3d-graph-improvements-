@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   defaultNodeIntelligence,
+  isStructuralNode,
   nodeMatchesMode,
   nodeVisualWeight,
   parseIntelligenceProjection,
@@ -33,10 +34,19 @@ test("parseIntelligenceProjection accepts only the canonical projection contract
   assert.equal(parseIntelligenceProjection("not-json"), null);
 });
 
-test("nodeMatchesMode keeps source families distinct", () => {
+test("nodeMatchesMode keeps source families distinct and includes bounded knowledge structure", () => {
   const note = defaultNodeIntelligence();
   assert.equal(nodeMatchesMode("knowledge", note), true);
   assert.equal(nodeMatchesMode("architecture", note), false);
+
+  const folder = {
+    ...defaultNodeIntelligence(),
+    kind: "folder",
+    source: "obsidian_structure",
+    virtual: true,
+  };
+  assert.equal(isStructuralNode(folder), true);
+  assert.equal(nodeMatchesMode("knowledge", folder), true);
 
   const architecture = {
     ...defaultNodeIntelligence(),
@@ -56,7 +66,7 @@ test("nodeMatchesMode keeps source families distinct", () => {
   assert.equal(nodeMatchesMode("live", live), true);
 });
 
-test("nodeVisualWeight rewards central nodes without unbounded sizes", () => {
+test("nodeVisualWeight rewards central and supported hub nodes without runaway sizes", () => {
   const small = defaultNodeIntelligence();
   const central = {
     ...defaultNodeIntelligence(),
@@ -66,7 +76,15 @@ test("nodeVisualWeight rewards central nodes without unbounded sizes", () => {
       bridge_score: 0.8,
     },
   };
+  const stableTag = {
+    ...defaultNodeIntelligence(),
+    kind: "tag",
+    source: "obsidian_structure",
+    virtual: true,
+    metadata: { support: 32 },
+  };
 
   assert.ok(nodeVisualWeight(central) > nodeVisualWeight(small));
+  assert.ok(nodeVisualWeight(stableTag) > 4.5);
   assert.ok(nodeVisualWeight(central) <= 26);
 });

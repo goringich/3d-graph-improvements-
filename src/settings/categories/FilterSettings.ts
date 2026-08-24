@@ -4,7 +4,8 @@ export class FilterSettings {
   doShowOrphans = true;
   doShowAttachments = false;
   doShowVirtualNodes = true;
-  doShowSemanticEdges = false;
+  doShowStructureNodes = true;
+  doShowSemanticEdges = true;
   graphMode: GraphMode = "all";
   localDepth = 1;
 
@@ -12,6 +13,7 @@ export class FilterSettings {
     doShowOrphans?: boolean,
     doShowAttachments?: boolean,
     doShowVirtualNodes?: boolean,
+    doShowStructureNodes?: boolean,
     doShowSemanticEdges?: boolean,
     graphMode?: GraphMode,
     localDepth?: number
@@ -19,6 +21,7 @@ export class FilterSettings {
     this.doShowOrphans = doShowOrphans ?? this.doShowOrphans;
     this.doShowAttachments = doShowAttachments ?? this.doShowAttachments;
     this.doShowVirtualNodes = doShowVirtualNodes ?? this.doShowVirtualNodes;
+    this.doShowStructureNodes = doShowStructureNodes ?? this.doShowStructureNodes;
     this.doShowSemanticEdges = doShowSemanticEdges ?? this.doShowSemanticEdges;
     this.graphMode = graphMode ?? this.graphMode;
     this.localDepth = Math.max(1, Math.min(6, localDepth ?? this.localDepth));
@@ -29,6 +32,7 @@ export class FilterSettings {
       store?.doShowOrphans,
       store?.doShowAttachments,
       store?.doShowVirtualNodes,
+      store?.doShowStructureNodes,
       store?.doShowSemanticEdges,
       store?.graphMode,
       store?.localDepth
@@ -40,6 +44,7 @@ export class FilterSettings {
       doShowOrphans: this.doShowOrphans,
       doShowAttachments: this.doShowAttachments,
       doShowVirtualNodes: this.doShowVirtualNodes,
+      doShowStructureNodes: this.doShowStructureNodes,
       doShowSemanticEdges: this.doShowSemanticEdges,
       graphMode: this.graphMode,
       localDepth: this.localDepth,

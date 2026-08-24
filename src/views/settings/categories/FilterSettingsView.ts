@@ -68,8 +68,19 @@ const FilterSettingsView = (
     });
 
   new Setting(containerEl)
+    .setName("Show folders and stable tags")
+    .setDesc("Adds bounded structural hubs so related notes form readable clusters without pairwise noise.")
+    .addToggle((toggle) => {
+      toggle
+        .setValue(filterSettings.value.doShowStructureNodes)
+        .onChange(async (value) => {
+          filterSettings.value.doShowStructureNodes = value;
+        });
+    });
+
+  new Setting(containerEl)
     .setName("Show semantic suggestions")
-    .setDesc("Semantic edges are low-authority suggestions and never become wikilinks automatically.")
+    .setDesc("Only high-signal RAG suggestions produced by the semantic-link gate are rendered; they never become wikilinks automatically.")
     .addToggle((toggle) => {
       toggle
         .setValue(filterSettings.value.doShowSemanticEdges)

@@ -4,6 +4,12 @@ import { ForceGraph } from "./ForceGraph";
 import { GraphSettingsView } from "../settings/GraphSettingsView";
 import Graph3dPlugin, { GRAPH_3D_VIEW_TYPE } from "src/main";
 
+const scalarText = (value: unknown): string | number | undefined => {
+  return typeof value === "string" || typeof value === "number"
+    ? value
+    : undefined;
+};
+
 export class Graph3dView extends ItemView {
   private forceGraph: ForceGraph;
   private inspector: HTMLDivElement;
@@ -78,9 +84,22 @@ export class Graph3dView extends ItemView {
     this.inspector.createDiv({
       cls: "graph-intelligence-inspector-empty",
       text: this.plugin.intelligenceProjection
-        ? "Select a node to inspect authority, live state and graph metrics."
+        ? "Select a node to inspect authority, live state, graph signal and relation types."
         : "Native Obsidian graph mode. Unified projection is not loaded.",
     });
+  }
+
+  private relationSummary(node: Node): string {
+    const counts = new Map<string, number>();
+    node.links.forEach((link) => {
+      const kind = link.intelligence.kind || "related";
+      counts.set(kind, (counts.get(kind) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .slice(0, 6)
+      .map(([kind, count]) => `${kind} ${count}`)
+      .join(" · ");
   }
 
   private renderInspector(node: Node) {
@@ -89,8 +108,10 @@ export class Graph3dView extends ItemView {
     const intel = node.intelligence;
     this.inspector.createEl("strong", { text: node.name });
 
+    const semanticCount = node.links.filter((link) => link.intelligence.semantic).length;
     const rows: [string, string | number | undefined][] = [
       ["Kind", intel.kind],
+      ["Role", scalarText(intel.metadata.role || intel.metadata.hub_role)],
       ["Source", intel.source],
       ["Layer", intel.layer],
       ["Authority", intel.state.authority],
@@ -103,6 +124,12 @@ export class Graph3dView extends ItemView {
       ["Betweenness", intel.metrics.betweenness],
       ["Bridge score", intel.metrics.bridge_score],
       ["Community", intel.metrics.community],
+      ["Support", scalarText(intel.metadata.support)],
+      ["Semantic relations", semanticCount || undefined],
+      ["Relations", this.relationSummary(node) || undefined],
+      ["Folder", scalarText(intel.metadata.folder)],
+      ["Project", scalarText(intel.metadata.project)],
+      ["Repository", scalarText(intel.metadata.repository)],
     ];
 
     rows.forEach(([label, value]) => {
