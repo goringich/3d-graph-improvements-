@@ -20,6 +20,10 @@ import {
   linkCurvature,
   linkWidthMultiplier,
 } from "../../intelligence/VisualEncoding";
+import {
+  isDependencyRelation,
+  type GraphDirection,
+} from "../../intelligence/GraphSemantics";
 
 const endpointId = (endpoint: string | Node): string => {
   return typeof endpoint === "string" ? endpoint : endpoint.id;
@@ -51,6 +55,7 @@ export class ForceGraph {
 
   private readonly highlightedNodes: Set<string> = new Set();
   private readonly highlightedLinks: Set<Link> = new Set();
+  private focusedNodeIds: Set<string> | null = null;
   hoveredNode: Node | null;
 
   private readonly isLocalGraph: boolean;
@@ -103,11 +108,13 @@ export class ForceGraph {
     const intel = node.intelligence;
     const role = metadataText(intel.metadata.role || intel.metadata.hub_role);
     const support = metadataText(intel.metadata.support);
+    const change = metadataText(intel.metadata.change);
     const degree = Number(intel.metrics.degree || 0);
     const bridge = Number(intel.metrics.bridge_score || 0);
     const details = [
       intel.kind,
       role ? `role: ${role}` : "",
+      change ? `change: ${change}` : "",
       support ? `support: ${support}` : "",
       degree ? `degree: ${degree}` : "",
       bridge >= 0.25 ? `bridge: ${bridge.toFixed(2)}` : "",
@@ -120,18 +127,24 @@ export class ForceGraph {
     )}</strong>${details.length ? `<br>${details.map((value) => escapeHtml(String(value))).join(" · ")}` : ""}</div>`;
   }
 
-  private getGraphData = (): Graph => {
+  private baseGraph = (): Graph => {
     if (this.isLocalGraph && this.plugin.openFileState.value) {
-      this.graph = this.plugin.globalGraph
+      return this.plugin.globalGraph
         .clone()
         .getLocalGraph(
           this.plugin.openFileState.value,
           this.plugin.getSettings().filters.localDepth
         );
-    } else {
-      this.graph = this.plugin.globalGraph.clone();
     }
+    return this.plugin.globalGraph.clone();
+  };
 
+  private getGraphData = (): Graph => {
+    let next = this.baseGraph();
+    if (this.focusedNodeIds?.size) {
+      next = next.getSubgraph(this.focusedNodeIds);
+    }
+    this.graph = next;
     return stabilizeGraphLayout(this.graph);
   };
 
@@ -156,7 +169,13 @@ export class ForceGraph {
       this.instance.linkDirectionalParticleWidth(
         this.plugin.getSettings().display.particleSize
       );
-    } else if (data.currentPath === "filters.localDepth") {
+    } else if (
+      data.currentPath === "filters.localDepth" ||
+      data.currentPath === "filters.graphMode" ||
+      data.currentPath === "filters.doShowStructureNodes" ||
+      data.currentPath === "filters.doShowSemanticEdges" ||
+      data.currentPath === "filters.doShowVirtualNodes"
+    ) {
       this.refreshGraphData();
       return;
     }
@@ -199,6 +218,10 @@ export class ForceGraph {
         ? this.plugin.theme.interactiveAccentHover
         : this.plugin.theme.textAccent;
     }
+
+    const change = String(node.intelligence.metadata.change || "");
+    if (change === "removed") return this.plugin.theme.backgroundModifierError || this.plugin.theme.textFaint;
+    if (change === "added") return this.plugin.theme.backgroundModifierSuccess || this.plugin.theme.textAccent;
 
     const live = node.intelligence.state.live || "";
     if (live === "conflicting" || live === "failed") {
@@ -248,6 +271,16 @@ export class ForceGraph {
       return false;
     }
     if (filters.graphMode === "semantic" && !link.intelligence.semantic) return false;
+    if (filters.graphMode === "dependencies" && !isDependencyRelation(link)) return false;
+
+    const sceneSize = this.graph?.nodes.length || 0;
+    if (
+      sceneSize > 2500 &&
+      !this.isHighlightedLink(link) &&
+      (link.intelligence.semantic || isStructuralKind(link.intelligence.kind))
+    ) {
+      return false;
+    }
 
     const source = this.graph.getNodeById(
       endpointId(link.source as unknown as string | Node)
@@ -266,7 +299,7 @@ export class ForceGraph {
       return;
     }
 
-    this.clearHighlights();
+    if (!this.focusedNodeIds) this.clearHighlights();
 
     if (node) {
       this.highlightedNodes.add(node.id);
@@ -346,7 +379,7 @@ export class ForceGraph {
   };
 
   private onLinkHover = (link: Link | null) => {
-    this.clearHighlights();
+    if (!this.focusedNodeIds) this.clearHighlights();
 
     if (link) {
       this.highlightedLinks.add(link);
@@ -372,6 +405,80 @@ export class ForceGraph {
       .linkWidth(this.instance.linkWidth())
       .linkDirectionalArrowColor(this.instance.linkDirectionalArrowColor())
       .linkDirectionalParticles(this.instance.linkDirectionalParticles());
+  }
+
+  private zoomToFocused() {
+    const instance = this.instance as ForceGraph3DInstance & {
+      zoomToFit?: (duration?: number, padding?: number) => void;
+    };
+    instance.zoomToFit?.(450, 60);
+  }
+
+  public focusNodeIds(nodeIds: Iterable<string>) {
+    const ids = new Set(nodeIds);
+    this.focusedNodeIds = ids.size ? ids : null;
+    this.clearHighlights();
+    ids.forEach((id) => this.highlightedNodes.add(id));
+    this.refreshGraphData();
+    this.graph.links.forEach((link) => {
+      const source = endpointId(link.source as unknown as string | Node);
+      const target = endpointId(link.target as unknown as string | Node);
+      if (ids.has(source) && ids.has(target)) this.highlightedLinks.add(link);
+    });
+    this.updateHighlight();
+    this.zoomToFocused();
+  }
+
+  public focusNeighborhood(
+    nodeId: string,
+    direction: GraphDirection = "both",
+    depth = 2,
+    dependenciesOnly = false
+  ): Map<string, number> {
+    const sourceGraph = this.plugin.globalGraph.clone();
+    const distances = sourceGraph.neighborhood(
+      nodeId,
+      direction,
+      depth,
+      dependenciesOnly ? isDependencyRelation : () => true
+    );
+    this.focusNodeIds(distances.keys());
+    this.highlightedNodes.clear();
+    this.highlightedNodes.add(nodeId);
+    this.updateHighlight();
+    return distances;
+  }
+
+  public focusPath(path: string[]) {
+    this.focusNodeIds(path);
+    this.clearHighlights();
+    path.forEach((id) => this.highlightedNodes.add(id));
+    for (let index = 0; index < path.length - 1; index += 1) {
+      const current = path[index];
+      const next = path[index + 1];
+      this.graph.getLinksWithNode(current).forEach((link) => {
+        const source = endpointId(link.source as unknown as string | Node);
+        const target = endpointId(link.target as unknown as string | Node);
+        if (
+          (source === current && target === next) ||
+          (source === next && target === current)
+        ) {
+          this.highlightedLinks.add(link);
+        }
+      });
+    }
+    this.updateHighlight();
+  }
+
+  public clearFocus() {
+    this.focusedNodeIds = null;
+    this.clearHighlights();
+    this.refreshGraphData();
+    this.zoomToFocused();
+  }
+
+  public isFocused(): boolean {
+    return Boolean(this.focusedNodeIds?.size);
   }
 
   getInstance(): ForceGraph3DInstance {
