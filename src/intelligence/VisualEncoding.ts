@@ -51,6 +51,29 @@ export const relationWeight = (metadata: EdgeVisualMetadata): number => {
   return 0.82;
 };
 
+export const relationSpacingMultiplier = (
+  metadata?: Partial<EdgeVisualMetadata>
+): number => {
+  const kind = normalized(metadata?.kind);
+  if (kind === "in_folder") return 0.68;
+  if (kind === "tagged_with") return 0.78;
+  if (kind === "parent_folder") return 0.9;
+  if (kind === "wikilink") return 1;
+  if (kind === "contains") return 1.08;
+  if (
+    kind === "imports" ||
+    kind === "calls" ||
+    kind === "handled_by" ||
+    kind === "reads_writes" ||
+    kind === "verified_by"
+  ) {
+    return 1.16;
+  }
+  if (kind === "observed_as" || kind === "has_incident") return 1.22;
+  if (metadata?.semantic || kind === "semantic_related") return 1.48;
+  return 1.1;
+};
+
 export const linkWidthMultiplier = (metadata: EdgeVisualMetadata): number => {
   return Math.max(0.24, relationWeight(metadata) * confidenceWeight(metadata.confidence));
 };
@@ -74,5 +97,5 @@ export const linkArrowLength = (metadata: EdgeVisualMetadata): number => {
 
 export const isStructuralKind = (kind: string): boolean => {
   const value = normalized(kind);
-  return value === "in_folder" || value === "tagged_with";
+  return value === "in_folder" || value === "tagged_with" || value === "parent_folder";
 };
