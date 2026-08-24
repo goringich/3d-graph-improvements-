@@ -7,184 +7,186 @@ import ObsidianTheme from "./util/ObsidianTheme";
 import EventBus from "./util/EventBus";
 import { ResolvedLinkCache } from "./graph/Link";
 import shallowCompare from "./util/ShallowCompare";
+import {
+  loadIntelligenceProjection,
+  type IntelligenceProjection,
+} from "./intelligence/Projection";
 
 export const GRAPH_3D_VIEW_TYPE = "3d_graph_view";
 
 export default class Graph3dPlugin extends Plugin {
-	_resolvedCache: ResolvedLinkCache;
+  _resolvedCache: ResolvedLinkCache;
 
-	// States
-	public settingsState: State<GraphSettings>;
-	public openFileState: State<string | undefined> = new State(undefined);
-	private cacheIsReady: State<boolean> = new State(false);
+  public settingsState: State<GraphSettings>;
+  public openFileState: State<string | undefined> = new State(undefined);
+  private cacheIsReady: State<boolean> = new State(false);
 
-	// Other properties
-	public globalGraph: Graph;
-	public theme: ObsidianTheme;
-	// Graphs that are waiting for cache to be ready
-	private queuedGraphs: Graph3dView[] = [];
-	private callbackUnregisterHandles: (() => void)[] = [];
+  public globalGraph: Graph;
+  public theme: ObsidianTheme;
+  public intelligenceProjection: IntelligenceProjection | null = null;
+  private queuedGraphs: Graph3dView[] = [];
+  private callbackUnregisterHandles: (() => void)[] = [];
 
-	async onload() {
-		await this.init();
-		this.addRibbonIcon("glasses", "3D Graph", this.openGlobalGraph);
-		this.addCommand({
-			id: "open-3d-graph-global",
-			name: "Open Global 3D Graph",
-			callback: this.openGlobalGraph,
-		});
+  async onload() {
+    await this.init();
+    this.addRibbonIcon("glasses", "3D Graph", this.openGlobalGraph);
+    this.addCommand({
+      id: "open-3d-graph-global",
+      name: "Open Global 3D Graph",
+      callback: this.openGlobalGraph,
+    });
 
-		this.addCommand({
-			id: "open-3d-graph-local",
-			name: "Open Local 3D Graph",
-			callback: this.openLocalGraph,
-		});
-	}
+    this.addCommand({
+      id: "open-3d-graph-local",
+      name: "Open Local 3D Graph",
+      callback: this.openLocalGraph,
+    });
 
-	private async init() {
-		await this.initStates();
-		this.initListeners();
-	}
+    this.addCommand({
+      id: "reload-3d-graph-intelligence",
+      name: "Reload Unified Intelligence Projection",
+      callback: async () => {
+        await this.refreshGlobalGraph(true);
+      },
+    });
+  }
 
-	private async initStates() {
-		const settings = await this.loadSettings();
-		this.settingsState = new State<GraphSettings>(settings);
-		this.theme = new ObsidianTheme(this.app.workspace.containerEl);
-		this.cacheIsReady.value =
-			this.app.metadataCache.resolvedLinks !== undefined;
-		this.onGraphCacheChanged();
-	}
+  private async init() {
+    await this.initStates();
+    this.initListeners();
+  }
 
-	private initListeners() {
-		this.callbackUnregisterHandles.push(
-			// save settings on change
-			this.settingsState.onChange(() => this.saveSettings())
-		);
+  private async initStates() {
+    const settings = await this.loadSettings();
+    this.settingsState = new State<GraphSettings>(settings);
+    this.theme = new ObsidianTheme(this.app.workspace.containerEl);
+    this.cacheIsReady.value = this.app.metadataCache.resolvedLinks !== undefined;
+    await this.refreshGlobalGraph(false);
+  }
 
-		// internal event to reset settings to default
-		EventBus.on("do-reset-settings", this.onDoResetSettings);
+  private initListeners() {
+    this.callbackUnregisterHandles.push(
+      this.settingsState.onChange(() => this.saveSettings())
+    );
 
-		// show open local graph button in file menu
-		this.registerEvent(
-			this.app.workspace.on("file-menu", (menu, file) => {
-				if (!file) return;
-				menu.addItem((item) => {
-					item.setTitle("Open in local 3D Graph")
-						.setIcon("glasses")
-						.onClick(() => this.openLocalGraph());
-				});
-			})
-		);
+    EventBus.on("do-reset-settings", this.onDoResetSettings);
 
-		// when a file gets opened, update the open file state
-		this.registerEvent(
-			this.app.workspace.on("file-open", (file) => {
-				if (file) this.openFileState.value = file.path;
-			})
-		);
+    this.registerEvent(
+      this.app.workspace.on("file-menu", (menu, file) => {
+        if (!file) return;
+        menu.addItem((item) => {
+          item
+            .setTitle("Open in local 3D Graph")
+            .setIcon("glasses")
+            .onClick(() => this.openLocalGraph());
+        });
+      })
+    );
 
-		this.callbackUnregisterHandles.push(
-			// when the cache is ready, open the queued graphs
-			this.cacheIsReady.onChange((isReady) => {
-				if (isReady) {
-					this.openQueuedGraphs();
-				}
-			})
-		);
+    this.registerEvent(
+      this.app.workspace.on("file-open", (file) => {
+        if (file) this.openFileState.value = file.path;
+      })
+    );
 
-		// all files are resolved, so the cache is ready:
-		this.app.metadataCache.on(
-			"resolved",
-			this.onGraphCacheReady.bind(this)
-		);
-		// the cache changed:
-		this.app.metadataCache.on(
-			"resolve",
-			this.onGraphCacheChanged.bind(this)
-		);
-	}
+    this.callbackUnregisterHandles.push(
+      this.cacheIsReady.onChange((isReady) => {
+        if (isReady) this.openQueuedGraphs();
+      })
+    );
 
-	// opens all queued graphs (graphs get queued if cache isnt ready yet)
-	private openQueuedGraphs() {
-		this.queuedGraphs.forEach((view) => view.showGraph());
-		this.queuedGraphs = [];
-	}
+    this.registerEvent(
+      this.app.metadataCache.on("resolved", () => {
+        this.cacheIsReady.value = true;
+        void this.onGraphCacheChanged();
+      })
+    );
+    this.registerEvent(
+      this.app.metadataCache.on("resolve", () => {
+        void this.onGraphCacheChanged();
+      })
+    );
+  }
 
-	private onGraphCacheReady = () => {
-		this.cacheIsReady.value = true;
-		this.onGraphCacheChanged();
-	};
+  private openQueuedGraphs() {
+    this.queuedGraphs.forEach((view) => view.showGraph());
+    this.queuedGraphs = [];
+  }
 
-	private onGraphCacheChanged = () => {
-		// check if the cache actually updated
-		// Obsidian API sends a lot of (for this plugin) unnecessary stuff
-		// with the resolve event
-		if (
-			this.cacheIsReady.value &&
-			!shallowCompare(
-				this._resolvedCache,
-				this.app.metadataCache.resolvedLinks
-			)
-		) {
-			this._resolvedCache = structuredClone(
-				this.app.metadataCache.resolvedLinks
-			);
-			this.globalGraph = Graph.createFromApp(this.app);
-		}
-	};
+  private async onGraphCacheChanged() {
+    if (
+      this.cacheIsReady.value &&
+      !shallowCompare(this._resolvedCache, this.app.metadataCache.resolvedLinks)
+    ) {
+      this._resolvedCache = structuredClone(this.app.metadataCache.resolvedLinks);
+      await this.refreshGlobalGraph(false);
+    }
+  }
 
-	private onDoResetSettings = () => {
-		this.settingsState.value.reset();
-		EventBus.trigger("did-reset-settings");
-	};
+  private async refreshGlobalGraph(showNotice: boolean) {
+    this.intelligenceProjection = await loadIntelligenceProjection(this.app);
+    this.globalGraph = Graph.createFromApp(this.app).applyProjection(
+      this.intelligenceProjection
+    );
+    EventBus.trigger("graph-changed");
 
-	// Opens a local graph view in a new leaf
-	private openLocalGraph = () => {
-		const newFilePath = this.app.workspace.getActiveFile()?.path;
+    if (showNotice) {
+      new Notice(
+        this.intelligenceProjection
+          ? `Unified Intelligence Graph loaded: ${this.intelligenceProjection.nodes.length} projected nodes, ${this.intelligenceProjection.edges.length} projected edges`
+          : "Unified Intelligence Graph projection is unavailable; using native Obsidian links only"
+      );
+    }
+  }
 
-		if (newFilePath) {
-			this.openFileState.value = newFilePath;
-			this.openGraph(true);
-		} else {
-			new Notice("No file is currently open");
-		}
-	};
+  private onDoResetSettings = () => {
+    this.settingsState.value.reset();
+    EventBus.trigger("did-reset-settings");
+  };
 
-	// Opens a global graph view in the current leaf
-	private openGlobalGraph = () => {
-		this.openGraph(false);
-	};
+  private openLocalGraph = () => {
+    const newFilePath = this.app.workspace.getActiveFile()?.path;
 
-	// Open a global or local graph
-	private openGraph = async (isLocalGraph: boolean) => {
-		const leaf = this.app.workspace.getLeaf(isLocalGraph ? "split" : false);
-		const graphView = new Graph3dView(this, leaf, isLocalGraph);
-		await leaf.open(graphView);
-		this.app.workspace.revealLeaf(leaf);
-		if (this.cacheIsReady.value) {
-			graphView.showGraph();
-		} else {
-			this.queuedGraphs.push(graphView);
-		}
-	};
+    if (newFilePath) {
+      this.openFileState.value = newFilePath;
+      this.openGraph(true);
+    } else {
+      new Notice("No file is currently open");
+    }
+  };
 
-	private async loadSettings(): Promise<GraphSettings> {
-		const loadedData = await this.loadData(),
-			settings = GraphSettings.fromStore(loadedData);
-		return settings;
-	}
+  private openGlobalGraph = () => {
+    this.openGraph(false);
+  };
 
-	async saveSettings() {
-		await this.saveData(this.settingsState.getRawValue().toObject());
-	}
+  private openGraph = async (isLocalGraph: boolean) => {
+    const leaf = this.app.workspace.getLeaf(isLocalGraph ? "split" : false);
+    const graphView = new Graph3dView(this, leaf, isLocalGraph);
+    await leaf.open(graphView);
+    this.app.workspace.revealLeaf(leaf);
+    if (this.cacheIsReady.value) {
+      graphView.showGraph();
+    } else {
+      this.queuedGraphs.push(graphView);
+    }
+  };
 
-	onunload() {
-		super.onunload();
-		this.callbackUnregisterHandles.forEach((handle) => handle());
-		EventBus.off("do-reset-settings", this.onDoResetSettings);
-	}
+  private async loadSettings(): Promise<GraphSettings> {
+    const loadedData = await this.loadData();
+    return GraphSettings.fromStore(loadedData);
+  }
 
-	public getSettings(): GraphSettings {
-		return this.settingsState.value;
-	}
+  async saveSettings() {
+    await this.saveData(this.settingsState.getRawValue().toObject());
+  }
+
+  onunload() {
+    super.onunload();
+    this.callbackUnregisterHandles.forEach((handle) => handle());
+    EventBus.off("do-reset-settings", this.onDoResetSettings);
+  }
+
+  public getSettings(): GraphSettings {
+    return this.settingsState.value;
+  }
 }
