@@ -9,15 +9,20 @@ const FilterSettingsView = (
 ) => {
   new Setting(containerEl)
     .setName("Graph mode")
-    .setDesc("Switch between knowledge, architecture, project, live and semantic projections.")
+    .setDesc("Switch between knowledge, architecture, runtime, AI, security, dependency, live, semantic and change lenses.")
     .addDropdown((dropdown) => {
       const modes: GraphMode[] = [
         "all",
         "knowledge",
         "architecture",
         "projects",
+        "runtime",
+        "ai",
+        "security",
+        "dependencies",
         "live",
         "semantic",
+        "changes",
       ];
       modes.forEach((mode) => dropdown.addOption(mode, mode));
       dropdown
