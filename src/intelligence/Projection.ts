@@ -113,12 +113,22 @@ export const loadIntelligenceProjection = async (
   }
 };
 
+export const isStructuralNode = (metadata: NodeIntelligenceMetadata): boolean => {
+  return (
+    metadata.source === "obsidian_structure" ||
+    metadata.kind === "folder" ||
+    metadata.kind === "tag"
+  );
+};
+
 export const nodeMatchesMode = (
   mode: GraphMode,
   metadata: NodeIntelligenceMetadata
 ): boolean => {
   if (mode === "all") return true;
-  if (mode === "knowledge") return metadata.kind === "note";
+  if (mode === "knowledge") {
+    return metadata.kind === "note" || isStructuralNode(metadata);
+  }
   if (mode === "architecture") {
     return metadata.source === "architecture" || metadata.kind === "architecture_layer";
   }
@@ -136,8 +146,21 @@ export const nodeVisualWeight = (metadata: NodeIntelligenceMetadata): number => 
   const pagerank = Number(metadata.metrics.pagerank || 0);
   const degree = Number(metadata.metrics.degree || 0);
   const bridge = Number(metadata.metrics.bridge_score || 0);
-  const base = metadata.kind === "note" ? 6 : 8;
-  return Math.max(3, base + Math.min(18, pagerank * 500 + Math.log2(degree + 1) * 2 + bridge * 8));
+  const support = Number(metadata.metadata.support || 0);
+  const baseByKind: Record<string, number> = {
+    note: 6,
+    folder: 5,
+    tag: 4.5,
+    architecture_layer: 11,
+    authority: 10,
+    project: 9,
+    repository: 8,
+    incident: 8,
+  };
+  const base = baseByKind[metadata.kind] ?? (metadata.virtual ? 7 : 6);
+  const centrality = pagerank * 500 + Math.log2(degree + 1) * 2 + bridge * 8;
+  const supportBoost = Math.min(8, Math.log2(support + 1) * 1.4);
+  return Math.max(3, base + Math.min(18, centrality) + supportBoost);
 };
 
 export const defaultNodeIntelligence = (): NodeIntelligenceMetadata => ({
