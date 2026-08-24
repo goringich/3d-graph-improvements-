@@ -135,7 +135,7 @@ export class ForceGraph {
       this.instance.linkDirectionalParticleWidth(
         this.plugin.getSettings().display.particleSize
       );
-    } else if (data.currentPath === "value.filters.localDepth") {
+    } else if (data.currentPath === "filters.localDepth") {
       this.refreshGraphData();
       return;
     }
