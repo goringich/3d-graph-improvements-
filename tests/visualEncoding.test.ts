@@ -7,6 +7,7 @@ import {
   linkArrowLength,
   linkCurvature,
   linkWidthMultiplier,
+  relationSpacingMultiplier,
 } from "../src/intelligence/VisualEncoding.ts";
 
 const edge = (overrides: Record<string, unknown> = {}) => ({
@@ -35,6 +36,22 @@ test("typed directed relations receive bounded directional encoding", () => {
   assert.ok(linkWidthMultiplier(incident) > linkWidthMultiplier(folder));
   assert.equal(isStructuralKind("IN_FOLDER"), true);
   assert.equal(isStructuralKind("TAGGED_WITH"), true);
+  assert.equal(isStructuralKind("PARENT_FOLDER"), true);
+});
+
+test("relation spacing keeps local structure compact and cross-domain discovery wide", () => {
+  const folder = relationSpacingMultiplier(edge({ kind: "IN_FOLDER" }));
+  const tag = relationSpacingMultiplier(edge({ kind: "TAGGED_WITH" }));
+  const wiki = relationSpacingMultiplier(edge());
+  const calls = relationSpacingMultiplier(edge({ kind: "CALLS", sourceClass: "project_reality" }));
+  const semantic = relationSpacingMultiplier(
+    edge({ kind: "SEMANTIC_RELATED", sourceClass: "semantic", semantic: true })
+  );
+
+  assert.ok(folder < tag);
+  assert.ok(tag < wiki);
+  assert.ok(wiki < calls);
+  assert.ok(calls < semantic);
 });
 
 test("confidence weights are monotonic for verified and suggested edges", () => {
