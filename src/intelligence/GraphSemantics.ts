@@ -4,6 +4,28 @@ import type { GraphMode } from "./Projection";
 
 export type GraphDirection = "both" | "incoming" | "outgoing";
 
+export type RelationCategory =
+  | "dependency"
+  | "containment"
+  | "ownership"
+  | "execution"
+  | "data_flow"
+  | "verification"
+  | "observation"
+  | "knowledge"
+  | "semantic"
+  | "causal"
+  | "deployment"
+  | "security_boundary"
+  | "association"
+  | "unknown";
+
+export interface RelationSemantics {
+  category: RelationCategory;
+  directed: boolean;
+  impact: boolean;
+}
+
 export type SpotlightCommand =
   | { action: "search"; term: string; mode?: GraphMode; liveGaps?: boolean }
   | { action: "impact"; term: string; direction: GraphDirection; depth: number }
@@ -74,16 +96,102 @@ const UNDIRECTED_RELATIONS = new Set([
   "in_folder",
 ]);
 
-export const isDirectedRelation = (link: Link): boolean => {
-  if (link.intelligence.semantic) return false;
-  return !UNDIRECTED_RELATIONS.has(normalize(link.intelligence.kind));
+const RELATION_CATEGORIES: Record<string, RelationCategory> = {
+  depends_on: "dependency",
+  requires: "dependency",
+  uses: "dependency",
+  imports: "dependency",
+  calls: "execution",
+  handled_by: "execution",
+  invokes: "execution",
+  routes_to: "execution",
+  reads_writes: "data_flow",
+  reads: "data_flow",
+  writes: "data_flow",
+  consumes: "data_flow",
+  produces: "data_flow",
+  contains: "containment",
+  parent_folder: "containment",
+  in_folder: "containment",
+  tagged_with: "knowledge",
+  wikilink: "knowledge",
+  semantic_related: "semantic",
+  owns: "ownership",
+  owned_by: "ownership",
+  verified_by: "verification",
+  tested_by: "verification",
+  observed_as: "observation",
+  observed_in: "observation",
+  part_of_journey: "association",
+  has_incident: "causal",
+  caused_by: "causal",
+  deployed_as: "deployment",
+  runs_on: "deployment",
+  trust_boundary: "security_boundary",
+  denies: "security_boundary",
+  allows: "security_boundary",
 };
 
-export const isDependencyRelation = (link: Link): boolean => {
-  const kind = normalize(link.intelligence.kind);
-  if (link.intelligence.semantic) return false;
-  return !new Set(["wikilink", "tagged_with", "in_folder", "parent_folder"]).has(kind);
+const IMPACT_CATEGORIES = new Set<RelationCategory>([
+  "dependency",
+  "execution",
+  "data_flow",
+  "causal",
+]);
+
+const metadataString = (link: Link, key: string): string => {
+  const metadata = link.intelligence.metadata || {};
+  return normalize(metadata[key]);
 };
+
+export const relationSemantics = (link: Link): RelationSemantics => {
+  const kind = normalize(link.intelligence.kind);
+  if (link.intelligence.semantic) {
+    return { category: "semantic", directed: false, impact: false };
+  }
+
+  const metadataCategory = metadataString(link, "relation_category") as RelationCategory;
+  const category = (
+    metadataCategory && [
+      "dependency",
+      "containment",
+      "ownership",
+      "execution",
+      "data_flow",
+      "verification",
+      "observation",
+      "knowledge",
+      "semantic",
+      "causal",
+      "deployment",
+      "security_boundary",
+      "association",
+      "unknown",
+    ].includes(metadataCategory)
+      ? metadataCategory
+      : RELATION_CATEGORIES[kind] || "unknown"
+  ) as RelationCategory;
+
+  const direction = metadataString(link, "direction");
+  const directed = direction === "undirected"
+    ? false
+    : direction === "directed"
+      ? true
+      : !UNDIRECTED_RELATIONS.has(kind);
+
+  const impactMetadata = metadataString(link, "impact_semantics");
+  const impact = impactMetadata === "propagates"
+    ? true
+    : impactMetadata === "non_propagating"
+      ? false
+      : IMPACT_CATEGORIES.has(category);
+
+  return { category, directed, impact };
+};
+
+export const isDirectedRelation = (link: Link): boolean => relationSemantics(link).directed;
+
+export const isDependencyRelation = (link: Link): boolean => relationSemantics(link).impact;
 
 export const parseSpotlightQuery = (query: string): SpotlightCommand => {
   const raw = query.trim();
