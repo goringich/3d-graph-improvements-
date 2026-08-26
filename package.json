@@ -1,6 +1,6 @@
 {
   "name": "3d-graph",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A typed 3D knowledge and AI-OS intelligence graph for Obsidian",
   "main": "main.js",
   "scripts": {
