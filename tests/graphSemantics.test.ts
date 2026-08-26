@@ -6,6 +6,7 @@ import {
   rankNodeMatches,
   isDirectedRelation,
   isDependencyRelation,
+  relationSemantics,
 } from "../src/intelligence/GraphSemantics.ts";
 import { defaultNodeIntelligence } from "../src/intelligence/Projection.ts";
 
@@ -24,7 +25,11 @@ const node = (name: string, path: string, metadata: Record<string, unknown> = {}
   },
 });
 
-const link = (kind: string, semantic = false) => ({
+const link = (
+  kind: string,
+  semantic = false,
+  metadata: Record<string, unknown> = {}
+) => ({
   source: "a",
   target: "b",
   linksAnAttachment: false,
@@ -32,7 +37,7 @@ const link = (kind: string, semantic = false) => ({
     kind,
     sourceClass: "test",
     semantic,
-    metadata: {},
+    metadata,
   },
 });
 
@@ -83,11 +88,47 @@ test("rankNodeMatches prefers exact labels and metadata-backed matches", () => {
   assert.equal(ranked.length, 3);
 });
 
-test("relation direction and dependency semantics keep weak graph edges out of impact", () => {
+test("impact traversal is fail-closed and relation-aware", () => {
+  assert.equal(isDependencyRelation(link("DEPENDS_ON") as never), true);
+  assert.equal(isDependencyRelation(link("CALLS") as never), true);
+  assert.equal(isDependencyRelation(link("HANDLED_BY") as never), true);
+  assert.equal(isDependencyRelation(link("READS_WRITES") as never), true);
+  assert.equal(isDependencyRelation(link("HAS_INCIDENT") as never), true);
+
+  assert.equal(isDependencyRelation(link("VERIFIED_BY") as never), false);
+  assert.equal(isDependencyRelation(link("OBSERVED_IN") as never), false);
+  assert.equal(isDependencyRelation(link("OBSERVED_AS") as never), false);
+  assert.equal(isDependencyRelation(link("PART_OF_JOURNEY") as never), false);
+  assert.equal(isDependencyRelation(link("CONTAINS") as never), false);
+  assert.equal(isDependencyRelation(link("IN_FOLDER") as never), false);
+  assert.equal(isDependencyRelation(link("TAGGED_WITH") as never), false);
+  assert.equal(isDependencyRelation(link("SOME_NEW_RELATION") as never), false);
+});
+
+test("producer relation metadata can explicitly override impact semantics", () => {
+  const propagating = link("CUSTOM_EDGE", false, {
+    relation_category: "association",
+    impact_semantics: "propagates",
+    direction: "directed",
+  });
+  assert.deepEqual(relationSemantics(propagating as never), {
+    category: "association",
+    directed: true,
+    impact: true,
+  });
+
+  const nonPropagating = link("DEPENDS_ON", false, {
+    impact_semantics: "non_propagating",
+  });
+  assert.equal(isDependencyRelation(nonPropagating as never), false);
+});
+
+test("relation direction keeps knowledge and semantic edges undirected", () => {
   assert.equal(isDirectedRelation(link("CALLS") as never), true);
   assert.equal(isDirectedRelation(link("wikilink") as never), false);
   assert.equal(isDirectedRelation(link("SEMANTIC_RELATED", true) as never), false);
-  assert.equal(isDependencyRelation(link("VERIFIED_BY") as never), true);
-  assert.equal(isDependencyRelation(link("IN_FOLDER") as never), false);
-  assert.equal(isDependencyRelation(link("TAGGED_WITH") as never), false);
+  assert.equal(
+    isDirectedRelation(link("CALLS", false, { direction: "undirected" }) as never),
+    false
+  );
 });
