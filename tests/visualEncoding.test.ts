@@ -35,6 +35,7 @@ test("typed directed relations receive bounded directional encoding", () => {
   assert.ok(linkWidthMultiplier(incident) > linkWidthMultiplier(folder));
   assert.equal(isStructuralKind("IN_FOLDER"), true);
   assert.equal(isStructuralKind("TAGGED_WITH"), true);
+  assert.equal(isStructuralKind("PARENT_FOLDER"), true);
 });
 
 test("confidence weights are monotonic for verified and suggested edges", () => {

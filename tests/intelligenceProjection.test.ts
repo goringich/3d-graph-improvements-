@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   defaultNodeIntelligence,
+  isLiveGap,
   isStructuralNode,
   nodeMatchesMode,
   nodeVisualWeight,
@@ -64,6 +65,55 @@ test("nodeMatchesMode keeps source families distinct and includes bounded knowle
     virtual: true,
   };
   assert.equal(nodeMatchesMode("live", live), true);
+});
+
+test("system-wide lenses classify runtime, AI, security, dependencies and changes deterministically", () => {
+  const runtime = {
+    ...defaultNodeIntelligence(),
+    kind: "service",
+    source: "architecture",
+    virtual: true,
+    metadata: { purpose: "systemd runtime service" },
+  };
+  assert.equal(nodeMatchesMode("runtime", runtime), true);
+  assert.equal(nodeMatchesMode("dependencies", runtime), true);
+
+  const ai = {
+    ...defaultNodeIntelligence(),
+    kind: "agent",
+    source: "architecture",
+    virtual: true,
+    metadata: { purpose: "Codex routing agent" },
+  };
+  assert.equal(nodeMatchesMode("ai", ai), true);
+
+  const security = {
+    ...defaultNodeIntelligence(),
+    kind: "authority",
+    source: "architecture",
+    virtual: true,
+    metadata: { purpose: "secret trust boundary" },
+  };
+  assert.equal(nodeMatchesMode("security", security), true);
+
+  const changed = {
+    ...defaultNodeIntelligence(),
+    metadata: { change: "changed" },
+  };
+  assert.equal(nodeMatchesMode("changes", changed), true);
+});
+
+test("live-gap classification is explicit and does not treat good live state as a gap", () => {
+  const stale = {
+    ...defaultNodeIntelligence(),
+    state: { live: "stale" },
+  };
+  const verified = {
+    ...defaultNodeIntelligence(),
+    state: { live: "verified_current", freshness: "fresh" },
+  };
+  assert.equal(isLiveGap(stale), true);
+  assert.equal(isLiveGap(verified), false);
 });
 
 test("nodeVisualWeight rewards central and supported hub nodes without runaway sizes", () => {

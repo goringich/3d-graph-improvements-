@@ -74,5 +74,5 @@ export const linkArrowLength = (metadata: EdgeVisualMetadata): number => {
 
 export const isStructuralKind = (kind: string): boolean => {
   const value = normalized(kind);
-  return value === "in_folder" || value === "tagged_with";
+  return value === "in_folder" || value === "tagged_with" || value === "parent_folder";
 };

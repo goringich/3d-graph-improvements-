@@ -4,10 +4,10 @@ import assert from "node:assert/strict";
 import { DisplaySettings } from "../src/settings/categories/DisplaySettings.ts";
 import { applyDisplayForces } from "../src/views/graph/applyDisplayForces.ts";
 
-test("applyDisplayForces applies spacing, repulsion, damping and reheats the graph", () => {
+test("applyDisplayForces applies semantic spacing, repulsion, damping and reheats the graph", () => {
 	const displaySettings = new DisplaySettings(4, 5, 6, 4, 45, -90, 0.75);
 	let receivedRepulsion: number | undefined;
-	let receivedSpacing: number | undefined;
+	let distanceAccessor: ((link: { intelligence?: Record<string, unknown> }) => number) | undefined;
 	let receivedDamping: number | undefined;
 	let reheated = false;
 
@@ -22,8 +22,8 @@ test("applyDisplayForces applies spacing, repulsion, damping and reheats the gra
 			}
 			if (forceName === "link") {
 				return {
-					distance(value: number) {
-						receivedSpacing = value;
+					distance(value: number | ((link: { intelligence?: Record<string, unknown> }) => number)) {
+						if (typeof value === "function") distanceAccessor = value;
 					},
 				};
 			}
@@ -41,7 +41,14 @@ test("applyDisplayForces applies spacing, repulsion, damping and reheats the gra
 
 	assert.equal(applied, true);
 	assert.equal(receivedRepulsion, -90);
-	assert.equal(receivedSpacing, 45);
+	assert.ok(distanceAccessor);
+	assert.equal(distanceAccessor!({ intelligence: { kind: "wikilink", semantic: false } }), 45);
+	assert.ok(
+		distanceAccessor!({ intelligence: { kind: "SEMANTIC_RELATED", semantic: true } }) > 45
+	);
+	assert.ok(
+		distanceAccessor!({ intelligence: { kind: "IN_FOLDER", semantic: false } }) < 45
+	);
 	assert.equal(receivedDamping, 0.75);
 	assert.equal(reheated, true);
 });
