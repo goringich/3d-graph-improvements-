@@ -11,11 +11,19 @@ import {
   isLiveGap,
   nodeMatchesMode,
 } from "../../intelligence/Projection";
+import {
+  summarizeGraphHealth,
+  type GraphHealthFinding,
+} from "../../intelligence/GraphHealth";
 
 const scalarText = (value: unknown): string | number | undefined => {
   return typeof value === "string" || typeof value === "number"
     ? value
     : undefined;
+};
+
+const percentText = (value: number | undefined): string | undefined => {
+  return value === undefined ? undefined : `${(value * 100).toFixed(1)}%`;
 };
 
 export class Graph3dView extends ItemView {
@@ -99,6 +107,11 @@ export class Graph3dView extends ItemView {
         "aria-label": "Graph Spotlight",
       },
     });
+    const health = explorer.createEl("button", {
+      cls: "graph-intelligence-health",
+      text: "Health",
+    });
+    health.addEventListener("click", () => this.renderGraphHealth());
     const clear = explorer.createEl("button", {
       cls: "graph-intelligence-clear",
       text: "Clear",
@@ -122,10 +135,9 @@ export class Graph3dView extends ItemView {
   private defaultExplorerStatus(): string {
     const projection = this.plugin.intelligenceProjection;
     if (!projection) return "Native Obsidian graph · unified projection unavailable";
-    const counts = projection.counts || {};
-    const nodes = Number(counts.nodes || projection.nodes.length);
-    const edges = Number(counts.edges || projection.edges.length);
-    return `Unified projection · ${nodes} nodes · ${edges} edges · ${projection.generated_at}`;
+    const health = summarizeGraphHealth(projection);
+    const actionable = health.findings.filter((finding) => finding.severity !== "info").length;
+    return `Unified projection · ${health.nodeCount} nodes · ${health.edgeCount} edges · ${actionable ? `${actionable} health findings` : "health OK"} · ${projection.generated_at}`;
   }
 
   private setMode(mode: Parameters<typeof nodeMatchesMode>[0]) {
@@ -222,9 +234,63 @@ export class Graph3dView extends ItemView {
     this.inspector.createDiv({
       cls: "graph-intelligence-inspector-empty",
       text: this.plugin.intelligenceProjection
-        ? "Select a node to inspect authority, live state, graph signal and relation types."
+        ? "Select a node to inspect it, or open Health to see graph-wide weaknesses."
         : "Native Obsidian graph mode. Unified projection is not loaded.",
     });
+  }
+
+  private appendInspectorRow(label: string, value: string | number | undefined) {
+    if (value === undefined || value === "") return;
+    const row = this.inspector.createDiv({ cls: "graph-intelligence-inspector-row" });
+    row.createSpan({ cls: "graph-intelligence-inspector-label", text: `${label}: ` });
+    row.createSpan({ text: String(value) });
+  }
+
+  private appendHealthFinding(finding: GraphHealthFinding) {
+    const item = this.inspector.createDiv({
+      cls: `graph-intelligence-health-finding is-${finding.severity}`,
+    });
+    item.createDiv({
+      cls: "graph-intelligence-health-finding-title",
+      text: `${finding.severity.toUpperCase()} · ${finding.title}`,
+    });
+    item.createDiv({
+      cls: "graph-intelligence-health-finding-detail",
+      text: finding.detail,
+    });
+  }
+
+  private renderGraphHealth() {
+    if (!this.inspector) return;
+    this.inspector.empty();
+    this.inspector.createEl("strong", { text: "Graph Health" });
+    const projection = this.plugin.intelligenceProjection;
+    if (!projection) {
+      this.inspector.createDiv({
+        cls: "graph-intelligence-inspector-empty",
+        text: "Unified projection is unavailable; graph-wide quality cannot be evaluated.",
+      });
+      return;
+    }
+
+    const health = summarizeGraphHealth(projection);
+    this.appendInspectorRow("Nodes", health.nodeCount);
+    this.appendInspectorRow("Active edges", health.edgeCount);
+    this.appendInspectorRow("Components", health.componentCount);
+    this.appendInspectorRow("Largest component", percentText(health.largestComponentRatio));
+    this.appendInspectorRow("Orphans", health.orphanCount);
+    this.appendInspectorRow("Source families", health.sourceFamilyCount);
+    this.appendInspectorRow("Cross-source edges", health.crossSourceEdgeCount);
+    this.appendInspectorRow("Bridge nodes", health.crossSourceBridgeNodeCount);
+    this.appendInspectorRow("Identity bridge coverage", percentText(health.identityBridgeCoverage));
+    this.appendInspectorRow("Unknown relations", health.unknownRelationCount);
+
+    const findings = this.inspector.createDiv({ cls: "graph-intelligence-health-findings" });
+    findings.createEl("strong", { text: "Top weaknesses" });
+    health.findings.forEach((finding) => this.appendHealthFinding(finding));
+    this.explorerStatus.setText(
+      `Graph Health · ${health.findings.filter((finding) => finding.severity === "critical").length} critical · ${health.findings.filter((finding) => finding.severity === "warning").length} warnings`
+    );
   }
 
   private relationSummary(node: Node): string {
@@ -265,6 +331,7 @@ export class Graph3dView extends ItemView {
       const distances = this.forceGraph.focusNeighborhood(node.id, "outgoing", 2, true);
       this.explorerStatus.setText(`Depends on · ${node.name} · ${distances.size} nodes`);
     });
+    addAction("Health", () => this.renderGraphHealth());
     addAction("Clear", () => {
       this.forceGraph.clearFocus();
       this.explorerStatus.setText(this.defaultExplorerStatus());
@@ -303,12 +370,7 @@ export class Graph3dView extends ItemView {
       ["Repository", scalarText(intel.metadata.repository)],
     ];
 
-    rows.forEach(([label, value]) => {
-      if (value === undefined || value === "") return;
-      const row = this.inspector.createDiv({ cls: "graph-intelligence-inspector-row" });
-      row.createSpan({ cls: "graph-intelligence-inspector-label", text: `${label}: ` });
-      row.createSpan({ text: String(value) });
-    });
+    rows.forEach(([label, value]) => this.appendInspectorRow(label, value));
   }
 
   private onNodeClick(node: Node) {
