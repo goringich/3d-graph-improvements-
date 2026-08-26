@@ -5,13 +5,14 @@ umask 077
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 VAULT="${1:-${OBSIDIAN_VAULT:-$HOME/Desktop/Obsidian}}"
 CHECK=0
+# Only build/runtime inputs belong in runtime source identity. versions.json is
+# Obsidian compatibility registry metadata and is not installed or executed.
 RUNTIME_PATHS=(
   src
   manifest.json
   package.json
   package-lock.json
   styles.css
-  versions.json
 )
 
 if [[ "${1:-}" == "--check" ]]; then
