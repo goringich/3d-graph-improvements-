@@ -4,6 +4,7 @@ export const INTELLIGENCE_PROJECTION_PATH =
   "System/Vault Intelligence/Generated/unified-intelligence-graph.v1.json";
 
 export type GraphMode =
+  | "universe"
   | "all"
   | "knowledge"
   | "architecture"
@@ -98,6 +99,21 @@ const searchable = (metadata: NodeIntelligenceMetadata): string => {
     .toLowerCase();
 };
 
+const hasMetadataValue = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.some(hasMetadataValue);
+  if (typeof value === "string") return value.trim().length > 0;
+  return value !== undefined && value !== null && value !== false;
+};
+
+export const isExplicitKnowledgeBridge = (
+  metadata: NodeIntelligenceMetadata
+): boolean => {
+  if (metadata.source !== "obsidian" || metadata.kind !== "note") return false;
+  return ["repository", "project", "component", "system", "graph_refs"].some((key) =>
+    hasMetadataValue(metadata.metadata[key])
+  );
+};
+
 export const parseIntelligenceProjection = (
   raw: string
 ): IntelligenceProjection | null => {
@@ -158,6 +174,13 @@ export const nodeMatchesMode = (
 ): boolean => {
   const change = String(metadata.metadata.change || "").toLowerCase();
   if (change === "removed" && mode !== "changes") return false;
+  if (mode === "universe") {
+    return (
+      ["architecture", "project_reality", "state_graph"].includes(metadata.source) ||
+      metadata.kind === "architecture_layer" ||
+      isExplicitKnowledgeBridge(metadata)
+    );
+  }
   if (mode === "all") return true;
   if (mode === "knowledge") {
     return metadata.kind === "note" || isStructuralNode(metadata);
