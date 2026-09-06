@@ -6,6 +6,7 @@ import {
   rankNodeMatches,
   isDirectedRelation,
   isDependencyRelation,
+  isEvidenceRelation,
   relationSemantics,
 } from "../src/intelligence/GraphSemantics.ts";
 import { defaultNodeIntelligence } from "../src/intelligence/Projection.ts";
@@ -41,7 +42,7 @@ const link = (
   },
 });
 
-test("Spotlight parses impact, dependencies and path commands", () => {
+test("Spotlight parses impact, dependencies, evidence-why and path commands", () => {
   assert.deepEqual(parseSpotlightQuery("impact of Obsidian"), {
     action: "impact",
     term: "Obsidian",
@@ -60,6 +61,16 @@ test("Spotlight parses impact, dependencies and path commands", () => {
     direction: "outgoing",
     depth: 2,
   });
+  assert.deepEqual(parseSpotlightQuery("why Atlas"), {
+    action: "why",
+    term: "Atlas",
+    depth: 3,
+  });
+  assert.deepEqual(parseSpotlightQuery("почему Codex"), {
+    action: "why",
+    term: "Codex",
+    depth: 3,
+  });
   assert.deepEqual(parseSpotlightQuery("path Obsidian -> Qdrant"), {
     action: "path",
     from: "Obsidian",
@@ -67,7 +78,9 @@ test("Spotlight parses impact, dependencies and path commands", () => {
   });
 });
 
-test("Spotlight maps operational terms to deterministic lenses", () => {
+test("Spotlight maps Universe and operational terms to deterministic lenses", () => {
+  const universe = parseSpotlightQuery("system universe");
+  assert.equal(universe.action === "search" ? universe.mode : undefined, "universe");
   assert.equal(parseSpotlightQuery("runtime services").action, "search");
   const runtime = parseSpotlightQuery("runtime services");
   assert.equal(runtime.action === "search" ? runtime.mode : undefined, "runtime");
@@ -103,6 +116,19 @@ test("impact traversal is fail-closed and relation-aware", () => {
   assert.equal(isDependencyRelation(link("IN_FOLDER") as never), false);
   assert.equal(isDependencyRelation(link("TAGGED_WITH") as never), false);
   assert.equal(isDependencyRelation(link("SOME_NEW_RELATION") as never), false);
+});
+
+test("Why evidence traversal rejects semantic, structural and unknown relations", () => {
+  assert.equal(isEvidenceRelation(link("DEPENDS_ON") as never), true);
+  assert.equal(isEvidenceRelation(link("VERIFIED_BY") as never), true);
+  assert.equal(isEvidenceRelation(link("OBSERVED_IN") as never), true);
+  assert.equal(isEvidenceRelation(link("DEPLOYED_AS") as never), true);
+  assert.equal(isEvidenceRelation(link("HAS_INCIDENT") as never), true);
+
+  assert.equal(isEvidenceRelation(link("CONTAINS") as never), false);
+  assert.equal(isEvidenceRelation(link("WIKILINK") as never), false);
+  assert.equal(isEvidenceRelation(link("SEMANTIC_RELATED", true) as never), false);
+  assert.equal(isEvidenceRelation(link("SOME_NEW_RELATION") as never), false);
 });
 
 test("producer relation metadata can explicitly override impact semantics", () => {

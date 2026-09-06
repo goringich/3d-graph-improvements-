@@ -4,12 +4,14 @@ import { ForceGraph } from "./ForceGraph";
 import { GraphSettingsView } from "../settings/GraphSettingsView";
 import Graph3dPlugin, { GRAPH_3D_VIEW_TYPE } from "src/main";
 import {
+  isEvidenceRelation,
   parseSpotlightQuery,
   rankNodeMatches,
 } from "../../intelligence/GraphSemantics";
 import {
   isLiveGap,
   nodeMatchesMode,
+  type GraphMode,
 } from "../../intelligence/Projection";
 import {
   summarizeGraphHealth,
@@ -103,10 +105,37 @@ export class Graph3dView extends ItemView {
       cls: "graph-intelligence-search",
       attr: {
         type: "search",
-        placeholder: "Search · impact of X · dependencies of X · path A -> B",
+        placeholder: "Search · why X · impact of X · dependencies of X · path A -> B",
         "aria-label": "Graph Spotlight",
       },
     });
+
+    if (this.plugin.intelligenceProjection) {
+      const lenses = explorer.createDiv({ cls: "graph-intelligence-lenses" });
+      const lensModes: Array<[GraphMode, string]> = [
+        ["universe", "Universe"],
+        ["architecture", "Architecture"],
+        ["projects", "Projects"],
+        ["runtime", "Runtime"],
+        ["ai", "AI"],
+        ["security", "Security"],
+        ["dependencies", "Dependencies"],
+        ["live", "Live"],
+        ["changes", "Changes"],
+        ["knowledge", "Knowledge"],
+        ["semantic", "Semantic"],
+        ["all", "All"],
+      ];
+      lensModes.forEach(([mode, label]) => {
+        const button = lenses.createEl("button", {
+          cls: "graph-intelligence-lens",
+          text: label,
+          attr: { "data-mode": mode },
+        });
+        button.addEventListener("click", () => this.activateLens(mode));
+      });
+    }
+
     const health = explorer.createEl("button", {
       cls: "graph-intelligence-health",
       text: "Health",
@@ -144,6 +173,15 @@ export class Graph3dView extends ItemView {
     this.plugin.settingsState.value.filters.graphMode = mode;
   }
 
+  private activateLens(mode: GraphMode) {
+    this.forceGraph.clearFocus();
+    this.setMode(mode);
+    const count = this.plugin.globalGraph.nodes.filter((node) =>
+      nodeMatchesMode(mode, node.intelligence)
+    ).length;
+    this.explorerStatus.setText(`${mode} lens · ${count} matching nodes`);
+  }
+
   private resolveBest(term: string, candidates?: Node[]): Node | null {
     return rankNodeMatches(candidates || this.plugin.globalGraph.nodes, term, 1)[0] || null;
   }
@@ -168,6 +206,26 @@ export class Graph3dView extends ItemView {
       this.renderInspector(to);
       this.explorerStatus.setText(
         `Path · ${from.name} → ${to.name} · ${Math.max(0, path.length - 1)} hops`
+      );
+      return;
+    }
+
+    if (command.action === "why") {
+      const node = this.resolveBest(command.term);
+      if (!node) {
+        this.explorerStatus.setText(`Why: no node matched “${command.term}”.`);
+        return;
+      }
+      const distances = graph.neighborhood(
+        node.id,
+        "both",
+        command.depth,
+        isEvidenceRelation
+      );
+      this.forceGraph.focusNodeIds(distances.keys());
+      this.renderInspector(node);
+      this.explorerStatus.setText(
+        `Why / evidence · ${node.name} · ${distances.size} nodes · explicit non-semantic relations only`
       );
       return;
     }
@@ -315,6 +373,18 @@ export class Graph3dView extends ItemView {
     addAction("Focus", () => {
       const distances = this.forceGraph.focusNeighborhood(node.id, "both", 1, false);
       this.explorerStatus.setText(`Focus · ${node.name} · ${distances.size} nodes`);
+    });
+    addAction("Why", () => {
+      const distances = this.plugin.globalGraph.neighborhood(
+        node.id,
+        "both",
+        3,
+        isEvidenceRelation
+      );
+      this.forceGraph.focusNodeIds(distances.keys());
+      this.explorerStatus.setText(
+        `Why / evidence · ${node.name} · ${distances.size} nodes · explicit non-semantic relations only`
+      );
     });
     addAction("Impact", () => {
       this.setMode("dependencies");

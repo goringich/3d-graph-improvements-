@@ -29,6 +29,7 @@ export interface RelationSemantics {
 export type SpotlightCommand =
   | { action: "search"; term: string; mode?: GraphMode; liveGaps?: boolean }
   | { action: "impact"; term: string; direction: GraphDirection; depth: number }
+  | { action: "why"; term: string; depth: number }
   | { action: "path"; from: string; to: string };
 
 const normalize = (value: unknown): string => String(value ?? "").trim().toLowerCase();
@@ -139,6 +140,17 @@ const IMPACT_CATEGORIES = new Set<RelationCategory>([
   "causal",
 ]);
 
+const EVIDENCE_CATEGORIES = new Set<RelationCategory>([
+  "ownership",
+  "verification",
+  "causal",
+  "execution",
+  "deployment",
+  "dependency",
+  "data_flow",
+  "observation",
+]);
+
 const metadataString = (link: Link, key: string): string => {
   const metadata = link.intelligence.metadata || {};
   return normalize(metadata[key]);
@@ -193,6 +205,12 @@ export const isDirectedRelation = (link: Link): boolean => relationSemantics(lin
 
 export const isDependencyRelation = (link: Link): boolean => relationSemantics(link).impact;
 
+export const isEvidenceRelation = (link: Link): boolean => {
+  if (link.intelligence.semantic) return false;
+  const semantics = relationSemantics(link);
+  return semantics.category !== "unknown" && EVIDENCE_CATEGORIES.has(semantics.category);
+};
+
 export const parseSpotlightQuery = (query: string): SpotlightCommand => {
   const raw = query.trim();
   const normalized = raw.toLowerCase();
@@ -200,6 +218,11 @@ export const parseSpotlightQuery = (query: string): SpotlightCommand => {
   const path = raw.match(/^(?:path|route|путь)\s+(.+?)\s*(?:->|→|\bto\b|\bдо\b)\s*(.+)$/i);
   if (path) {
     return { action: "path", from: path[1].trim(), to: path[2].trim() };
+  }
+
+  const why = raw.match(/^(?:why|why does|why is|почему|зачем)\s+(.+)$/i);
+  if (why) {
+    return { action: "why", term: why[1].trim(), depth: 3 };
   }
 
   const impactRules: Array<{
@@ -217,6 +240,9 @@ export const parseSpotlightQuery = (query: string): SpotlightCommand => {
     }
   }
 
+  if (/^(?:universe|system universe|system map|вселенная|карта системы|система)$/i.test(normalized)) {
+    return { action: "search", term: "", mode: "universe" };
+  }
   if (/\b(stale|live gaps?|conflicts?|unknown|устарев|конфликт)\b/.test(normalized)) {
     return {
       action: "search",
