@@ -66,7 +66,7 @@
   display: grid;
   grid-template-columns: minmax(220px, 520px) auto auto;
   gap: 6px;
-  width: min(760px, calc(100% - 76px));
+  width: min(920px, calc(100% - 76px));
   pointer-events: auto;
 }
 
@@ -80,6 +80,33 @@
   background: var(--background-primary-alt);
   color: var(--text-normal);
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+}
+
+.graph-3d-view .graph-intelligence-lenses {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 4px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 3px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--background-primary-alt) 92%, transparent);
+  scrollbar-width: thin;
+}
+
+.graph-3d-view .graph-intelligence-lens {
+  flex: 0 0 auto;
+  min-height: 27px;
+  padding: 2px 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.graph-3d-view .graph-intelligence-lens[data-mode="universe"] {
+  font-weight: 700;
+  border-color: var(--interactive-accent);
 }
 
 .graph-3d-view .graph-intelligence-clear,
@@ -183,6 +210,10 @@
   .graph-3d-view .graph-intelligence-explorer {
     width: calc(100% - 64px);
     grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .graph-3d-view .graph-intelligence-lenses {
+    gap: 3px;
   }
 
   .graph-3d-view .graph-intelligence-inspector {
