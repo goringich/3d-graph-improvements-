@@ -9,9 +9,10 @@ const FilterSettingsView = (
 ) => {
   new Setting(containerEl)
     .setName("Graph mode")
-    .setDesc("Switch between knowledge, architecture, runtime, AI, security, dependency, live, semantic and change lenses.")
+    .setDesc("Switch between the high-signal System Universe and focused knowledge, architecture, runtime, AI, security, dependency, live, semantic and change lenses.")
     .addDropdown((dropdown) => {
       const modes: GraphMode[] = [
+        "universe",
         "all",
         "knowledge",
         "architecture",
