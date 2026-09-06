@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   defaultNodeIntelligence,
+  isExplicitKnowledgeBridge,
   isLiveGap,
   isStructuralNode,
   nodeMatchesMode,
@@ -33,6 +34,48 @@ test("parseIntelligenceProjection accepts only the canonical projection contract
     null
   );
   assert.equal(parseIntelligenceProjection("not-json"), null);
+});
+
+test("System Universe keeps exact system sources and declared knowledge bridges without vault noise", () => {
+  const rawNote = defaultNodeIntelligence();
+  assert.equal(nodeMatchesMode("universe", rawNote), false);
+
+  const bridgedNote = {
+    ...defaultNodeIntelligence(),
+    metadata: { repository: "goringich/__home_organized" },
+  };
+  assert.equal(isExplicitKnowledgeBridge(bridgedNote), true);
+  assert.equal(nodeMatchesMode("universe", bridgedNote), true);
+
+  const architecture = {
+    ...defaultNodeIntelligence(),
+    kind: "authority",
+    source: "architecture",
+    virtual: true,
+  };
+  const project = {
+    ...defaultNodeIntelligence(),
+    kind: "project",
+    source: "project_reality",
+    virtual: true,
+  };
+  const live = {
+    ...defaultNodeIntelligence(),
+    kind: "service",
+    source: "state_graph",
+    virtual: true,
+  };
+  const semantic = {
+    ...defaultNodeIntelligence(),
+    source: "semantic",
+    virtual: true,
+    metadata: { semantic: true },
+  };
+
+  assert.equal(nodeMatchesMode("universe", architecture), true);
+  assert.equal(nodeMatchesMode("universe", project), true);
+  assert.equal(nodeMatchesMode("universe", live), true);
+  assert.equal(nodeMatchesMode("universe", semantic), false);
 });
 
 test("nodeMatchesMode keeps source families distinct and includes bounded knowledge structure", () => {
